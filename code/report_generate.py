@@ -557,8 +557,8 @@ if __name__ == "__main__":
     parser.add_argument("--output_path", default="results", help="Directory to save results")
     parser.add_argument("--int_threshold", type=int, default=3000, help="Intensity threshold")
     parser.add_argument("--keep_cols", nargs='+', default=['index', 'name', 'precursor_mz', 'adduct', 'MS2_norm'], help="List of columns to keep for MS table")
-    parser.add_argument("--p_value_threshold", type=float, default=0.5, help="P-value threshold")
-    parser.add_argument("--fc_threshold", type=float, default=0.0, help="Fold change threshold")
+    parser.add_argument("--p_value_threshold", type=float, default=0.05, help="P-value threshold")
+    parser.add_argument("--fc_threshold", type=float, default=1.2, help="Fold change threshold")
 
     args = parser.parse_args()
 
