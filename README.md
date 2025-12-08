@@ -76,8 +76,8 @@ python code/report_generate.py \
 **Note: To run this process, the input file must contain at least 3 groups along with intensity or concentration values, and user must adjust the `groups, group_1, and group_2` parameters to match the experimental design.**
 
 | Parameter | Type | Description |
-| :--- | :--- | :--- | :--- |
-| `--input_path` | `String` | The file path to the identification result|
+| :--- | :--- | :--- |
+| `--input_path` | `String` | The file path to the identification result |
 | `--groups` | `List` | Space-separated list of all group prefixes present in the CSV columns (e.g., `Control Treated`). |
 | `--group_1` | `String`| The first group for differential analysis. Must be in `--groups`. |
 | `--group_2` | `String` | The second group for differential analysis. Must be in `--groups`. |
