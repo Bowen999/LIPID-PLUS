@@ -11,6 +11,8 @@ This pipeline performs comprehensive lipidomics annotation through the following
 Usage:
     python run.py input.csv --result_path results/ --db_path lipid_plus.db
     python run.py input.csv --result_path results/ --n_jobs 8  # Use 8 parallel workers for PLSF
+    python run.py input.csv --ms1_tol 15 --ms2_tol 25  # Custom ppm tolerances
+    python run.py input.csv --ms1_tol 0.005 --ms2_tol 0.01 --is_ppm False  # Use Da
 """
 
 import os
@@ -25,12 +27,15 @@ class LipidAnnotationPipeline:
     """Main pipeline orchestrator"""
     
     def __init__(self, input_path, result_path, db_path, adduct_model, class_model, plsf_model, 
-                 MS1_tol=0.005, MS2_tol=0.01, MS2_threshold=0.7, 
-                 ms1_tol_ppm=10, ms2_tol_ppm=20, n_jobs=4):
+                 ms1_tol=10, ms2_tol=20, MS2_threshold=0.7, is_ppm=True, n_jobs=4):
         """
         Initialize the pipeline
         
         Args:
+            ms1_tol: MS1 tolerance (default: 10 ppm)
+            ms2_tol: MS2 tolerance (default: 20 ppm)
+            MS2_threshold: Minimum MS2 similarity score for database match (default: 0.7)
+            is_ppm: If True, tolerances are in ppm; if False, in Da (default: True)
             n_jobs: Number of parallel workers for PLSF prediction (default: 4)
         """
         self.input_path = Path(input_path)
@@ -40,11 +45,10 @@ class LipidAnnotationPipeline:
         self.class_model = Path(class_model)
         self.plsf_model = Path(plsf_model)
         
-        self.MS1_tol = MS1_tol
-        self.MS2_tol = MS2_tol
+        self.ms1_tol = ms1_tol
+        self.ms2_tol = ms2_tol
         self.MS2_threshold = MS2_threshold
-        self.ms1_tol_ppm = ms1_tol_ppm
-        self.ms2_tol_ppm = ms2_tol_ppm
+        self.is_ppm = is_ppm
         self.n_jobs = n_jobs
         
         # Create result directory
@@ -132,10 +136,10 @@ class LipidAnnotationPipeline:
             str(self.processed_input_path),
             "--result_path", str(self.result_path),
             "--db_path", str(self.db_path),
-            "--MS1_tol", str(self.MS1_tol),
-            "--MS2_tol", str(self.MS2_tol),
+            "--MS1_tol", str(self.ms1_tol),
+            "--MS2_tol", str(self.ms2_tol),
             "--MS2_threshold", str(self.MS2_threshold),
-            "--is_ppm", "False"
+            "--is_ppm", str(self.is_ppm)
         ]
         
         success = self.run_command(cmd, "Database Search")
@@ -210,8 +214,8 @@ class LipidAnnotationPipeline:
             str(self.adduct_pred_path),
             str(self.class_model),
             "--output_path", str(self.class_pred_path),
-            "--ms1_tol", str(self.ms1_tol_ppm),
-            "--ms2_tol", str(self.ms2_tol_ppm)
+            "--ms1_tol", str(self.ms1_tol),
+            "--ms2_tol", str(self.ms2_tol)
         ]
         
         success = self.run_command(cmd, "Class Prediction")
@@ -570,6 +574,8 @@ def main():
 Example Usage:
   python run.py feature_df.csv --result_path results/
   python run.py feature_df.csv --result_path results/ --n_jobs 8
+  python run.py feature_df.csv --ms1_tol 15 --ms2_tol 25  # Custom ppm tolerances
+  python run.py feature_df.csv --ms1_tol 0.005 --ms2_tol 0.01 --is_ppm False  # Use Da
 
 Directory Structure Requirement:
   your_project/
@@ -631,17 +637,17 @@ Directory Structure Requirement:
     
     # Database search parameters
     parser.add_argument(
-        '--MS1_tol',
+        '--ms1_tol',
         type=float,
-        default=0.005,
-        help='MS1 tolerance for database search in Da'
+        default=10.0,
+        help='MS1 tolerance (default: 10 ppm, or Da if --is_ppm False)'
     )
     
     parser.add_argument(
-        '--MS2_tol',
+        '--ms2_tol',
         type=float,
-        default=0.01,
-        help='MS2 tolerance for database search in Da'
+        default=20.0,
+        help='MS2 tolerance (default: 20 ppm, or Da if --is_ppm False)'
     )
     
     parser.add_argument(
@@ -651,19 +657,11 @@ Directory Structure Requirement:
         help='Minimum MS2 similarity score for database match'
     )
     
-    # Class prediction parameters
     parser.add_argument(
-        '--ms1_tol_ppm',
-        type=float,
-        default=10.0,
-        help='MS1 tolerance for class prediction in ppm'
-    )
-    
-    parser.add_argument(
-        '--ms2_tol_ppm',
-        type=float,
-        default=20.0,
-        help='MS2 tolerance for class prediction in ppm'
+        '--is_ppm',
+        type=lambda x: x.lower() in ['true', '1', 'yes'],
+        default=True,
+        help='If True, tolerances are in ppm; if False, in Da (default: True)'
     )
     
     # Parallel processing parameter
@@ -690,11 +688,10 @@ Directory Structure Requirement:
             adduct_model=args.adduct_model,
             class_model=args.class_model,
             plsf_model=args.plsf_model,
-            MS1_tol=args.MS1_tol,
-            MS2_tol=args.MS2_tol,
+            ms1_tol=args.ms1_tol,
+            ms2_tol=args.ms2_tol,
             MS2_threshold=args.MS2_threshold,
-            ms1_tol_ppm=args.ms1_tol_ppm,
-            ms2_tol_ppm=args.ms2_tol_ppm,
+            is_ppm=args.is_ppm,
             n_jobs=args.n_jobs
         )
         

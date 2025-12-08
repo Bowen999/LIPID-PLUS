@@ -11,7 +11,7 @@
 
 # Installation
 ### Clone the project folder and download database 
- 
+Download the source code at https://github.com/Bowen999/LIPID-PLUS/releases or run the command below:
 ```bash
 git clone https://github.com/Bowen999/LIPID-PLUS.git
 cd LIPID-PLUS
@@ -23,7 +23,6 @@ wget -O dataset/lipid_plus.db https://github.com/Bowen999/LIPID-PLUS/releases/do
 ```
 
 ### Install the dependencies 
-
 ```
 conda create -n lipid_plus python=3.12 -y
 conda activate lipid_plus
@@ -42,9 +41,9 @@ The easiest way to run the complete identification pipeline (database search + m
 python run.py feature_df.csv
 ```
 
-The usage of the pipeline with custom parameters can be found in the `Advanced Usage` section.  
+The usage of the pipeline with **custom parameters** can be found in the `Advanced Usage` section of [Docs](https://bowen999.github.io/lipid-plus-docs/docs.html).  
 
-The pipeline will generate several files in the `results/` directory. **Main result file**: `results/final_annotations.csv` contains your complete lipid annotations.
+The pipeline will generate several files in the `results/` directory. **Main result file**: `results/final_annotations.csv` contains your complete lipid annotations, the `name` column displays the final search/prediction results.
 
 ```text
 results/
@@ -73,7 +72,7 @@ python code/report_generate.py \
   --fc_threshold 1
 ```
 
-To run this process, the input file must contain at least 3 groups along with intensity or concentration values.
+**Note: To run this process, the input file must contain at least 3 groups along with intensity or concentration values, and user must adjust the `groups, group_1, and group_2` parameters to match the experimental design.**
 
 | Parameter | Type | Description |
 | :--- | :--- | :--- | :--- |
@@ -82,7 +81,7 @@ To run this process, the input file must contain at least 3 groups along with in
 | `--group_1` | `String`| The first group for differential analysis. Must be in `--groups`. |
 | `--group_2` | `String` | The second group for differential analysis. Must be in `--groups`. |
 
-# Advance Usage
+# More Information
 **For Advance Usage, please look at [Docs](https://bowen999.github.io/lipid-plus-docs/docs.html)**
 
 # Contact
