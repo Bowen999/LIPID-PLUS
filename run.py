@@ -382,31 +382,39 @@ class LipidAnnotationPipeline:
             return True
 
     def cleanup_intermediate_files(self):
-        """Clean up intermediate files, keeping only final results"""
-        self.print_header("CLEANING UP INTERMEDIATE FILES")
+        """Move intermediate files to process_files folder"""
+        self.print_header("ORGANIZING INTERMEDIATE FILES")
+        
+        import shutil
+        
+        # Create process_files folder inside result_path
+        process_files_dir = self.result_path / "process_files"
+        process_files_dir.mkdir(parents=True, exist_ok=True)
         
         intermediate_files = [
             self.processed_input_path,
+            self.annotated_path,
             self.dark_lipid_path,
             self.adduct_pred_path,
             self.class_pred_path,
             self.final_output_path
         ]
         
-        removed_count = 0
+        moved_count = 0
         for file_path in intermediate_files:
             if file_path.exists():
                 try:
-                    file_path.unlink()
-                    removed_count += 1
-                    print(f"  Removed: {file_path.name}")
+                    dest_path = process_files_dir / file_path.name
+                    shutil.move(str(file_path), str(dest_path))
+                    moved_count += 1
+                    print(f"  Moved: {file_path.name} → process_files/")
                 except Exception as e:
-                    print(f"  ⚠ Could not remove {file_path.name}: {e}")
+                    print(f"  ⚠ Could not move {file_path.name}: {e}")
         
-        if removed_count > 0:
-            print(f"\n✓ Cleaned up {removed_count} intermediate files")
+        if moved_count > 0:
+            print(f"\n✓ Moved {moved_count} intermediate files to process_files/")
         else:
-            print("  No intermediate files to clean up")
+            print("  No intermediate files to move")
 
     def calculate_statistics(self, final_df):
         """Calculate detailed statistics from the final results"""
