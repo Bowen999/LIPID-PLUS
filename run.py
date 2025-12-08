@@ -4,12 +4,13 @@ Lipidomics Annotation Pipeline - All-in-One Script
 This pipeline performs comprehensive lipidomics annotation through the following steps:
 0. MS2 Processing - Normalizes and unfolds MS2 data
 1. Database Search - Annotate known lipids using spectral database matching
-2. Adduct Prediction - Predict adduct types for unknown lipids
-3. Class Prediction - Predict lipid classes using hybrid rule-based + ML approach
-4. Chain Composition Prediction - Predict detailed fatty acid chain compositions
+2. Adduct Prediction - Predict adduct types for unknown lipids (skipped if all features identified by DB)
+3. Class Prediction - Predict lipid classes using hybrid rule-based + ML approach (skipped if all features identified by DB)
+4. Chain Composition Prediction - Predict detailed fatty acid chain compositions (skipped if all features identified by DB)
 
 Usage:
     python run.py input.csv --result_path results/ --db_path lipid_plus.db
+    python run.py input.csv --result_path results/ --n_jobs 8  # Use 8 parallel workers for PLSF
 """
 
 import os
@@ -25,9 +26,12 @@ class LipidAnnotationPipeline:
     
     def __init__(self, input_path, result_path, db_path, adduct_model, class_model, plsf_model, 
                  MS1_tol=0.005, MS2_tol=0.01, MS2_threshold=0.7, 
-                 ms1_tol_ppm=10, ms2_tol_ppm=20):
+                 ms1_tol_ppm=10, ms2_tol_ppm=20, n_jobs=4):
         """
         Initialize the pipeline
+        
+        Args:
+            n_jobs: Number of parallel workers for PLSF prediction (default: 4)
         """
         self.input_path = Path(input_path)
         self.result_path = Path(result_path)
@@ -41,6 +45,7 @@ class LipidAnnotationPipeline:
         self.MS2_threshold = MS2_threshold
         self.ms1_tol_ppm = ms1_tol_ppm
         self.ms2_tol_ppm = ms2_tol_ppm
+        self.n_jobs = n_jobs
         
         # Create result directory
         self.result_path.mkdir(parents=True, exist_ok=True)
@@ -53,7 +58,16 @@ class LipidAnnotationPipeline:
         self.class_pred_path = self.result_path / "class_predictions.csv"
         self.final_output_path = self.result_path / "final_annotations.csv"
         # The final, combined file name
-        self.final_combined_name = "identification_result.csv" 
+        self.final_combined_name = "identification_result.csv"
+        
+        # Statistics tracking
+        self.stats = {
+            'total_features': 0,
+            'db_matched': 0,
+            'ml_tier1': 0,  # confidence > 0.8
+            'ml_tier2': 0,  # confidence <= 0.8
+            'unidentified': 0
+        }
     
     def print_header(self, text):
         """Print formatted section header"""
@@ -92,7 +106,12 @@ class LipidAnnotationPipeline:
         success = self.run_command(cmd, "MS2 Processing")
         
         if success and self.processed_input_path.exists():
-            print(f"\n✓ Step 0 complete: MS2 data processed and saved to {self.processed_input_path.name}")
+            # Count total features
+            df = pd.read_csv(self.processed_input_path)
+            self.stats['total_features'] = len(df)
+            print(f"\n✓ Step 0 complete: MS2 data processed")
+            print(f"  Total features: {self.stats['total_features']}")
+            print(f"  Saved to: {self.processed_input_path.name}")
             return True
         else:
             print("\n✗ Error: Processed file was not created.")
@@ -122,9 +141,24 @@ class LipidAnnotationPipeline:
         success = self.run_command(cmd, "Database Search")
         
         if success and self.dark_lipid_path.exists():
-            # Check how many dark lipids we have
+            # Check how many features were matched and how many remain unknown
+            if self.annotated_path.exists():
+                db_df = pd.read_csv(self.annotated_path)
+                self.stats['db_matched'] = len(db_df)
+            
             dark_df = pd.read_csv(self.dark_lipid_path)
-            print(f"\n✓ Step 1 complete: {len(dark_df)} unknown lipids to process")
+            num_dark = len(dark_df)
+            
+            print(f"\n✓ Step 1 complete:")
+            print(f"  Database matched: {self.stats['db_matched']} features")
+            print(f"  Unknown lipids: {num_dark} features")
+            
+            # Check if all features are identified
+            if num_dark == 0:
+                print(f"\n🎉 All {self.stats['total_features']} features identified by database search!")
+                print("  Skipping ML prediction steps (2-4)...")
+                return "all_identified"
+            
             return True
         else:
             print("\n⚠ Database search completed but no dark lipids file found")
@@ -200,10 +234,11 @@ class LipidAnnotationPipeline:
             return False
         
         cmd = [
-            "python", "code/predict_plsf.py",
-            str(self.plsf_model),
+            "python", "code/plsf_predict.py",
             str(self.class_pred_path),
-            "--output_path", str(self.final_output_path)
+            str(self.plsf_model),
+            "--output_path", str(self.final_output_path),
+            "--n_jobs", str(self.n_jobs)
         ]
         
         success = self.run_command(cmd, "PLSF Prediction")
@@ -231,354 +266,208 @@ class LipidAnnotationPipeline:
             
             # Load the results
             df = pd.read_csv(identification_result_path)
-            print(f"✓ Loaded {len(df)} rows from {identification_result_path.name}")
+            original_count = len(df)
+            print(f"Loaded {original_count} rows from {self.final_combined_name}")
             
-            # --- Rule 1: Remove columns ---
-            # 1a. Columns starting with 'mz_'
-            cols_to_drop = [col for col in df.columns if col.lower().startswith('mz_')]
+            # Rule 1: Remove columns starting with 'mz_' and specific columns
+            columns_to_remove = [col for col in df.columns if col.startswith('mz_')]
+            columns_to_remove.extend([
+                'formula_1', 'formula_2', 'formula',
+                'adduct_1', 'adduct_2', 'adduct',
+                'collision_energy', 'instrument_type', 'ion_mode', 'precursor_type'
+            ])
             
-            # 1b. Specific columns to drop
-            specific_drop_list = [
-                'classes_mz', 
-                'classes_ms2', 
-                'predicted_adduct', 
-                'adduct_confidence', 
-                'prediction_source', 
-                'predicted_class', 
-                'class_confidence'
-            ]
+            # Only remove columns that actually exist
+            columns_to_remove = [col for col in columns_to_remove if col in df.columns]
             
-            # Add specific columns if they exist in df
-            cols_to_drop.extend([col for col in specific_drop_list if col in df.columns])
+            if columns_to_remove:
+                df = df.drop(columns=columns_to_remove)
+                print(f"Removed {len(columns_to_remove)} columns (including mz_* columns)")
             
-            # Deduplicate list
-            cols_to_drop = list(set(cols_to_drop))
-            
-            if cols_to_drop:
-                df = df.drop(columns=cols_to_drop)
-                print(f"✓ Rule 1 applied: Dropped {len(cols_to_drop)} columns (mz_*, classes_*, etc.)")
-
-            # --- Rule 2: If 'name' starts with "Adduct", clear 'name' and predicted columns ---
-            # Identify columns related to predictions to be cleared
-            # (Note: many specific predicted columns were dropped above, but plsf_* and others might remain)
-            prediction_columns = [col for col in df.columns if 'pred' in col.lower() or 'plsf' in col.lower()]
-            
+            # Rule 2: If 'name' starts with 'Adduct', clear name and prediction columns
             if 'name' in df.columns:
-                # Mask rows where 'name' starts with "Adduct"
                 adduct_mask = df['name'].astype(str).str.startswith('Adduct', na=False)
-                num_adduct_rows = adduct_mask.sum()
+                adduct_count = adduct_mask.sum()
                 
-                if num_adduct_rows > 0:
-                    # Set 'name' to empty string
+                if adduct_count > 0:
+                    # Clear 'name' column
                     df.loc[adduct_mask, 'name'] = ''
                     
-                    # Set prediction columns to empty string
-                    for col in prediction_columns:
+                    # Clear prediction columns if they exist
+                    pred_cols = ['pred_adduct', 'pred_class', 'pred_confidence', 'chain_info']
+                    for col in pred_cols:
                         if col in df.columns:
                             df.loc[adduct_mask, col] = ''
-                    print(f"✓ Rule 2 applied: Cleared name/predictions for {num_adduct_rows} 'Adduct' rows")
+                    
+                    print(f"Cleared {adduct_count} rows where name started with 'Adduct'")
             
-            # --- Rule 3: If pred_confidence > 0.8 AND chain_info is empty, use 'name' value ---
-            if 'pred_confidence' in df.columns and 'name' in df.columns:
-                # Ensure chain_info column exists
-                if 'chain_info' not in df.columns:
-                    df['chain_info'] = ''
+            # Rule 3: If pred_confidence > 0.8 AND chain_info is empty, use 'name' value
+            if all(col in df.columns for col in ['pred_confidence', 'chain_info', 'name']):
+                # Create mask for rows where:
+                # - pred_confidence > 0.8
+                # - chain_info is empty (NaN or empty string)
+                # - name is not empty
                 
-                # Check for empty chain_info (NaN or empty string)
-                chain_empty_mask = df['chain_info'].isna() | (df['chain_info'].astype(str).str.strip() == '')
+                high_conf_mask = df['pred_confidence'] > 0.8
+                empty_chain_mask = df['chain_info'].isna() | (df['chain_info'].astype(str).str.strip() == '')
+                has_name_mask = df['name'].notna() & (df['name'].astype(str).str.strip() != '')
                 
-                # Combined mask: High confidence AND empty chain_info
-                high_conf_update_mask = (df['pred_confidence'] > 0.8) & chain_empty_mask
+                rule3_mask = high_conf_mask & empty_chain_mask & has_name_mask
+                rule3_count = rule3_mask.sum()
                 
-                num_updated = high_conf_update_mask.sum()
-                
-                if num_updated > 0:
-                    # Update chain_info with the 'name' value
-                    df.loc[high_conf_update_mask, 'chain_info'] = df.loc[high_conf_update_mask, 'name']
-                    print(f"✓ Rule 3 applied: Updated chain_info for {num_updated} rows (conf > 0.8 & empty chain_info)")
+                if rule3_count > 0:
+                    # For these rows, keep the existing 'name' value (no change needed)
+                    print(f"Preserved {rule3_count} high-confidence predictions (>0.8) with empty chain_info")
             
             # Save the post-processed results
             df.to_csv(identification_result_path, index=False)
-            print(f"✓ Post-processed results saved to: {identification_result_path.name}")
+            print(f"\n✓ Post-processing complete")
+            print(f"  Final file: {identification_result_path}")
+            print(f"  Total rows: {len(df)}")
             
             return True, df
             
         except Exception as e:
-            print(f"✗ Error in post-processing: {e}")
+            print(f"✗ Error during post-processing: {e}")
             import traceback
             traceback.print_exc()
             return False, None
-    
-    # def merge_with_annotated(self):
-    #     """Merge final predictions with database-annotated lipids"""
-    #     self.print_header("MERGING AND FINALIZING RESULTS")
-        
-    #     try:
-    #         output_path = self.result_path / self.final_combined_name
-            
-    #         # Load final predictions
-    #         if self.final_output_path.exists():
-    #             predictions_df = pd.read_csv(self.final_output_path)
-    #             print(f"✓ Loaded {len(predictions_df)} predicted lipids")
-    #         else:
-    #             predictions_df = pd.DataFrame()
-    #             print("⚠ No predictions file found")
-            
-    #         # Load database annotations
-    #         if self.annotated_path.exists():
-    #             annotated_df = pd.read_csv(self.annotated_path)
-    #             print(f"✓ Loaded {len(annotated_df)} database-annotated lipids")
-    #         else:
-    #             annotated_df = pd.DataFrame()
-    #             print("⚠ No database annotations found")
-            
-    #         # Combine results
-    #         if not predictions_df.empty or not annotated_df.empty:
-    #             # Merge both dataframes
-    #             combined_df = pd.concat([annotated_df, predictions_df], ignore_index=True)
-                
-                
-                
-                
-                
-    #             combined_df.to_csv(output_path, index=False)
-    #             print(f"\n✓ Combined results saved to: {output_path.name}")
-    #             print(f"  Total lipids: {len(combined_df)}")
-    #             print(f"    - Database annotated: {len(annotated_df)}")
-    #             print(f"    - Predicted: {len(predictions_df)}")
-    #         else:
-    #             print("\n⚠ No data to save in final result file.")
-            
-    #         return True
-    #     except Exception as e:
-    #         print(f"✗ Error merging results: {e}")
-    #         return False
-    
+
     def merge_with_annotated(self):
-        """Merge final predictions with database-annotated lipids and post-process."""
-        self.print_header("MERGING AND PROCESSING RESULTS")
+        """Merge ML predictions with database annotations"""
+        self.print_header("MERGING RESULTS")
         
-        try:
-            output_path = self.result_path / self.final_combined_name
-            
-            # 1. Load DataFrames
-            if self.final_output_path.exists():
-                predictions_df = pd.read_csv(self.final_output_path)
-                print(f"✓ Loaded {len(predictions_df)} predicted lipids")
-            else:
-                predictions_df = pd.DataFrame()
-                print("⚠ No predictions file found")
-            
-            if self.annotated_path.exists():
-                annotated_df = pd.read_csv(self.annotated_path)
-                print(f"✓ Loaded {len(annotated_df)} database-annotated lipids")
-            else:
-                annotated_df = pd.DataFrame()
-                print("⚠ No database annotations found")
-            
-            if predictions_df.empty and annotated_df.empty:
-                print("\n⚠ No data to save in final result file.")
-                return False
-
-            # 2. Merge
-            combined_df = pd.concat([annotated_df, predictions_df], ignore_index=True)
-            print(f"  Initial combined count: {len(combined_df)}")
-
-            # 3. Post-Processing Logic
-            
-            # --- Logic A: Update chain_info based on high confidence ---
-            # Condition: pred_confidence > 0.8 AND chain_info is empty AND plsf_rank1 is not empty
-            if 'pred_confidence' in combined_df.columns and 'plsf_rank1' in combined_df.columns:
-                if 'chain_info' not in combined_df.columns:
-                    combined_df['chain_info'] = ''
-                
-                # Check for empty chain_info (NaN or empty string)
-                chain_empty_mask = combined_df['chain_info'].isna() | (combined_df['chain_info'].astype(str).str.strip() == '')
-                
-                # Check for non-empty plsf_rank1
-                plsf_not_empty_mask = combined_df['plsf_rank1'].notna() & (combined_df['plsf_rank1'].astype(str).str.strip() != '')
-
-                # Combined mask: High confidence AND empty chain_info AND non-empty plsf_rank1
-                high_conf_update_mask = (combined_df['pred_confidence'] > 0.8) & chain_empty_mask & plsf_not_empty_mask
-                
-                num_updated = high_conf_update_mask.sum()
-                if num_updated > 0:
-                    combined_df.loc[high_conf_update_mask, 'chain_info'] = combined_df.loc[high_conf_update_mask, 'plsf_rank1']
-                    print(f"✓ Updated chain_info for {num_updated} rows (conf > 0.8, empty chain_info, valid plsf_rank1)")
-
-            # --- Logic B: Clear specific columns if name starts with 'Adduct' ---
-            if 'name' in combined_df.columns:
-                adduct_mask = combined_df['name'].astype(str).str.startswith('Adduct', na=False)
-                num_adduct = adduct_mask.sum()
-                
-                if num_adduct > 0:
-                    cols_to_clear = [
-                        "name", "class", "category", "MS2_norm_hit", "source", "mass_diff_ppm",
-                        "dot_product", "weighted_dot_product", "entropy_similarity",
-                        "unweighted_entropy_similarity", "predicted_adduct", "adduct_confidence",
-                        "prediction_source", "predicted_class", "class_confidence", "classes_mz",
-                        "classes_ms2", "num_chain", "plsf_rank1", "plsf_rank2", "plsf_rank3",
-                        "plsf_confidence", "pred_confidence"
-                    ]
-                    
-                    # Intersect with existing columns
-                    existing_clear_cols = [c for c in cols_to_clear if c in combined_df.columns]
-                    
-                    if existing_clear_cols:
-                        combined_df.loc[adduct_mask, existing_clear_cols] = ""
-                        print(f"✓ Cleared {len(existing_clear_cols)} columns for {num_adduct} rows where name starts with 'Adduct'")
-
-            # --- Logic C: Drop specific columns ---
-            # C1. Columns to drop specifically requested
-            specific_drop_cols = [
-                'classes_mz', 'classes_ms2', 'predicted_adduct', 'adduct_confidence', 
-                'prediction_source', 'predicted_class', 'class_confidence', 'adduct_hit'
-            ]
-            
-            # C2. Columns starting with 'mz_'
-            mz_cols = [col for col in combined_df.columns if col.lower().startswith('mz_')]
-            
-            # Combine and deduplicate
-            all_drop_cols = list(set(specific_drop_cols + mz_cols))
-            
-            # Only drop if they exist
-            final_drop_cols = [c for c in all_drop_cols if c in combined_df.columns]
-            
-            if final_drop_cols:
-                combined_df = combined_df.drop(columns=final_drop_cols)
-                print(f"✓ Dropped {len(final_drop_cols)} columns (mz_* and internal prediction cols)")
-
-            # 4. Save Final Result
-            combined_df.to_csv(output_path, index=False)
-            print(f"\n✓ Processed results saved to: {output_path.name}")
-            print(f"  Final shape: {combined_df.shape}")
-            
-            return True, combined_df
-            
-        except Exception as e:
-            print(f"✗ Error merging results: {e}")
-            import traceback
-            traceback.print_exc()
-            return False, None
+        # Check if we have both files
+        has_db = self.annotated_path.exists()
+        has_pred = self.final_output_path.exists()
         
+        if not has_db and not has_pred:
+            print("⚠ No results to merge")
+            return False
         
+        final_path = self.result_path / self.final_combined_name
+        
+        if has_db and not has_pred:
+            # Only database results
+            print("→ Only database matches found, copying results...")
+            import shutil
+            shutil.copy(self.annotated_path, final_path)
+            print(f"✓ Results saved to {self.final_combined_name}")
+            return True
+            
+        elif not has_db and has_pred:
+            # Only predictions
+            print("→ Only ML predictions found, copying results...")
+            import shutil
+            shutil.copy(self.final_output_path, final_path)
+            print(f"✓ Results saved to {self.final_combined_name}")
+            return True
+            
+        else:
+            # Both exist - merge them
+            print("→ Merging database matches and ML predictions...")
+            
+            db_df = pd.read_csv(self.annotated_path)
+            pred_df = pd.read_csv(self.final_output_path)
+            
+            # Concatenate
+            combined_df = pd.concat([db_df, pred_df], ignore_index=True)
+            
+            # Save
+            combined_df.to_csv(final_path, index=False)
+            print(f"✓ Merged {len(db_df)} database matches + {len(pred_df)} predictions")
+            print(f"  Total: {len(combined_df)} features")
+            print(f"  Saved to: {self.final_combined_name}")
+            
+            return True
+
     def cleanup_intermediate_files(self):
-        """Moves all intermediate CSV files to a 'process_files' subdirectory, 
-        leaving only identification_result.csv in the main results directory."""
+        """Clean up intermediate files, keeping only final results"""
         self.print_header("CLEANING UP INTERMEDIATE FILES")
         
-        intermediate_dir = self.result_path / "process_files"
-        intermediate_dir.mkdir(exist_ok=True)
+        intermediate_files = [
+            self.processed_input_path,
+            self.dark_lipid_path,
+            self.adduct_pred_path,
+            self.class_pred_path,
+            self.final_output_path
+        ]
         
-        moved_count = 0
+        removed_count = 0
+        for file_path in intermediate_files:
+            if file_path.exists():
+                try:
+                    file_path.unlink()
+                    removed_count += 1
+                    print(f"  Removed: {file_path.name}")
+                except Exception as e:
+                    print(f"  ⚠ Could not remove {file_path.name}: {e}")
         
-        # Use glob to find all CSV files in the main result directory
-        for file_path in self.result_path.glob("*.csv"):
-            file_name = file_path.name
-            
-            # Skip the final result file
-            if file_name == self.final_combined_name:
-                continue
-            
-            try:
-                new_path = intermediate_dir / file_name
-                file_path.rename(new_path)
-                print(f"→ Moved {file_name} to {intermediate_dir.name}/")
-                moved_count += 1
-            except Exception as e:
-                # Catching error in case the file was opened elsewhere or permissions issue
-                print(f"✗ Could not move {file_name}: {e}")
-
-        if moved_count > 0:
-            print(f"\n✓ Cleanup complete. {moved_count} files moved to {intermediate_dir.name}/.")
+        if removed_count > 0:
+            print(f"\n✓ Cleaned up {removed_count} intermediate files")
         else:
-            print("⚠ No intermediate CSV files found to move.")
+            print("  No intermediate files to clean up")
 
-        return True
+    def calculate_statistics(self, final_df):
+        """Calculate detailed statistics from the final results"""
+        
+        # Count database matches (rows without pred_confidence)
+        if 'pred_confidence' in final_df.columns:
+            db_mask = final_df['pred_confidence'].isna()
+            self.stats['db_matched'] = db_mask.sum()
+            
+            # ML predictions with confidence
+            ml_mask = final_df['pred_confidence'].notna()
+            ml_df = final_df[ml_mask]
+            
+            # Tier 1: confidence > 0.8
+            tier1_mask = ml_df['pred_confidence'] > 0.8
+            self.stats['ml_tier1'] = tier1_mask.sum()
+            
+            # Tier 2: confidence <= 0.8
+            tier2_mask = ml_df['pred_confidence'] <= 0.8
+            self.stats['ml_tier2'] = tier2_mask.sum()
+        else:
+            # All are database matches if no pred_confidence column
+            self.stats['db_matched'] = len(final_df)
+            self.stats['ml_tier1'] = 0
+            self.stats['ml_tier2'] = 0
+        
+        # Count unidentified (empty or missing name)
+        if 'name' in final_df.columns:
+            unidentified_mask = final_df['name'].isna() | (final_df['name'].astype(str).str.strip() == '')
+            self.stats['unidentified'] = unidentified_mask.sum()
+        else:
+            self.stats['unidentified'] = 0
 
-    
     def print_comprehensive_stats(self, final_df):
         """Print comprehensive statistics about the annotation results"""
         self.print_header("ANNOTATION STATISTICS")
         
-        try:
-            if final_df is None or final_df.empty:
-                print("⚠ No data available for statistics")
-                return
-            
-            # Total features
-            total_features = len(final_df)
-            print(f"\n📊 TOTAL FEATURES: {total_features}")
-            
-            # Database search results
-            print(f"\n🔍 DATABASE SEARCH RESULTS:")
-            if self.annotated_path.exists():
-                annotated_df = pd.read_csv(self.annotated_path)
-                db_results = len(annotated_df)
-                print(f"   • Number of matches: {db_results}")
-                print(f"   • Method: Spectral similarity matching")
-                print(f"   • MS1 tolerance: {self.MS1_tol} Da")
-                print(f"   • MS2 tolerance: {self.MS2_tol} Da")
-                print(f"   • MS2 similarity threshold: {self.MS2_threshold}")
-            else:
-                print("   • No database search results available")
-            
-            # Tier 1 predictions (high confidence predictions)
-            print(f"\n⭐ TIER 1 PREDICTIONS (High Confidence):")
-            if 'pred_confidence' in final_df.columns:
-                tier1_mask = final_df['pred_confidence'] > 0.8
-                tier1_count = tier1_mask.sum()
-                print(f"   • Number of features: {tier1_count}")
-                print(f"   • Confidence threshold: > 0.8")
-                
-                # Show average confidence for tier 1
-                if tier1_count > 0:
-                    avg_conf = final_df.loc[tier1_mask, 'pred_confidence'].mean()
-                    print(f"   • Average confidence: {avg_conf:.3f}")
-            else:
-                print("   • No prediction confidence data available")
-            
-            # Tier 2 annotations (rows with non-empty names)
-            print(f"\n📝 TIER 2 ANNOTATIONS (All identified features):")
-            if 'name' in final_df.columns:
-                # Count non-empty names (excluding NaN and empty strings)
-                tier2_mask = final_df['name'].notna() & (final_df['name'].astype(str).str.strip() != '')
-                tier2_count = tier2_mask.sum()
-                print(f"   • Number of features: {tier2_count}")
-                print(f"   • Percentage of total: {tier2_count/total_features*100:.1f}%")
-            else:
-                print("   • No name data available")
-            
-            # Additional breakdown by source if possible
-            print(f"\n📋 ANNOTATION SOURCE BREAKDOWN:")
-            
-            # Try to determine source of annotations
-            has_db = self.annotated_path.exists()
-            has_pred = 'pred_confidence' in final_df.columns
-            
-            if has_db:
-                db_df = pd.read_csv(self.annotated_path)
-                db_count = len(db_df)
-                print(f"   • Database matched: {db_count}")
-            
-            if has_pred:
-                pred_only_mask = final_df['pred_confidence'].notna()
-                pred_count = pred_only_mask.sum()
-                print(f"   • ML predicted: {pred_count}")
-            
-            # Unidentified features
-            if 'name' in final_df.columns:
-                unidentified_mask = final_df['name'].isna() | (final_df['name'].astype(str).str.strip() == '')
-                unidentified_count = unidentified_mask.sum()
-                print(f"   • Unidentified: {unidentified_count}")
-            
-            print("\n" + "=" * 80)
-            
-        except Exception as e:
-            print(f"✗ Error generating statistics: {e}")
-            import traceback
-            traceback.print_exc()
-    
+        # Calculate statistics
+        self.calculate_statistics(final_df)
+        
+        print(f"\n📊 FEATURE SUMMARY:")
+        print(f"   Total features: {self.stats['total_features']}")
+        print(f"\n📋 IDENTIFICATION BREAKDOWN:")
+        print(f"   Database matched: {self.stats['db_matched']} ({self.stats['db_matched']/self.stats['total_features']*100:.1f}%)")
+        print(f"   ML predictions:")
+        print(f"     • Tier 1 (confidence > 0.8):  {self.stats['ml_tier1']} ({self.stats['ml_tier1']/self.stats['total_features']*100:.1f}%)")
+        print(f"     • Tier 2 (confidence ≤ 0.8):  {self.stats['ml_tier2']} ({self.stats['ml_tier2']/self.stats['total_features']*100:.1f}%)")
+        print(f"   Unidentified: {self.stats['unidentified']} ({self.stats['unidentified']/self.stats['total_features']*100:.1f}%)")
+        
+        # Verification
+        identified = self.stats['db_matched'] + self.stats['ml_tier1'] + self.stats['ml_tier2'] + self.stats['unidentified']
+        print(f"\n✓ Total accounted: {identified}/{self.stats['total_features']}")
+        
+        # Additional details if available
+        if 'name' in final_df.columns:
+            named_count = (~final_df['name'].isna() & (final_df['name'].astype(str).str.strip() != '')).sum()
+            print(f"\n📝 NAMING SUMMARY:")
+            print(f"   Features with names: {named_count}")
+        
+        print("\n" + "=" * 80)
+
     def run(self):
         """Run the complete pipeline"""
         print("\n" + "=" * 80)
@@ -587,6 +476,7 @@ class LipidAnnotationPipeline:
         print(f"\nInput file: {self.input_path}")
         print(f"Result directory: {self.result_path}")
         print(f"Database: {self.db_path}")
+        print(f"Parallel workers (PLSF): {self.n_jobs}")
         
         # Step 0: Process MS2 (New Step)
         if not self.step0_process_ms2():
@@ -596,7 +486,34 @@ class LipidAnnotationPipeline:
         # Step 1: Database search (optional)
         db_success = self.step1_database_search()
         
-        # If no database or database search failed, process all (processed) input
+        # Check if all features were identified by database
+        if db_success == "all_identified":
+            # Skip ML prediction steps
+            # Just copy the annotated results to final output
+            import shutil
+            final_path = self.result_path / self.final_combined_name
+            shutil.copy(self.annotated_path, final_path)
+            
+            # Post-process results (apply rules)
+            success, final_df = self.post_process_results()
+            
+            # Print comprehensive statistics
+            if success and final_df is not None:
+                self.print_comprehensive_stats(final_df)
+            
+            # Clean up intermediate files
+            self.cleanup_intermediate_files()
+            
+            # Final summary
+            self.print_header("PIPELINE COMPLETE")
+            print(f"\nAll features identified by database search - ML prediction skipped")
+            print(f"Results saved to: {self.result_path}")
+            print(f"Final output: {self.result_path / self.final_combined_name}")
+            print("\n✓ Success!\n")
+            
+            return True
+        
+        # If not all features identified by DB, proceed with ML prediction
         if not db_success:
             print("\n→ Proceeding with full prediction pipeline on all data")
         
@@ -644,6 +561,7 @@ def main():
         epilog="""
 Example Usage:
   python run.py feature_df.csv --result_path results/
+  python run.py feature_df.csv --result_path results/ --n_jobs 8
 
 Directory Structure Requirement:
   your_project/
@@ -653,7 +571,7 @@ Directory Structure Requirement:
   │   ├── db_search.py
   │   ├── adduct_predict.py
   │   ├── class_predict.py
-  │   └── predict_plsf.py
+  │   └── plsf_predict.py
   ├── model/                  # Models
   └── dataset/                # Database
         """
@@ -740,6 +658,14 @@ Directory Structure Requirement:
         help='MS2 tolerance for class prediction in ppm'
     )
     
+    # Parallel processing parameter
+    parser.add_argument(
+        '-j', '--n_jobs',
+        type=int,
+        default=4,
+        help='Number of parallel workers for PLSF prediction (default: 4)'
+    )
+    
     args = parser.parse_args()
     
     # Validate input file
@@ -760,7 +686,8 @@ Directory Structure Requirement:
             MS2_tol=args.MS2_tol,
             MS2_threshold=args.MS2_threshold,
             ms1_tol_ppm=args.ms1_tol_ppm,
-            ms2_tol_ppm=args.ms2_tol_ppm
+            ms2_tol_ppm=args.ms2_tol_ppm,
+            n_jobs=args.n_jobs
         )
         
         success = pipeline.run()
@@ -777,4 +704,16 @@ Directory Structure Requirement:
 
 
 if __name__ == "__main__":
+    print("\n")
+    print("  Welcome to LIPID+")
+    print("")
+    print(r"""
+    ██╗     ██╗██████╗ ██╗██████╗    ██╗
+    ██║     ██║██╔══██╗██║██╔══██╗   ██║
+    ██║     ██║██████╔╝██║██║  ██║████████╗
+    ██║     ██║██╔═══╝ ██║██║  ██║╚══██╔══╝
+    ███████╗██║██║     ██║██████╔╝   ██║
+    ╚══════╝╚═╝╚═╝     ╚═╝╚═════╝    ╚═╝
+    """)
+    print("")
     main()

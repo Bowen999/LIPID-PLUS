@@ -4,133 +4,341 @@ import math
 import re
 import numpy as np
 
+# def identify_class_by_mass(precursor_mz, adduct, tolerance_ppm=15.0):
+#     """
+#     Identifies potential lipid classes and compositions by matching the precursor m/z.
+
+#     This function calculates the neutral mass from the precursor m/z and adduct, then
+#     iterates through possible lipid compositions. If a theoretical mass matches the
+#     neutral mass within the specified ppm tolerance, the class, its specific
+#     composition, and the ppm error are recorded. Results are sorted by ppm error.
+
+#     Args:
+#         precursor_mz (float): The experimentally observed mass-to-charge ratio.
+#         adduct (str): The adduct type (e.g., '[M+H]+', '[M-H]-').
+#         tolerance_ppm (float): The mass tolerance in parts-per-million (ppm).
+
+#     Returns:
+#         tuple: A tuple containing two lists:
+#             - A sorted list of unique potential lipid class abbreviations based on ppm error.
+#             - A sorted list of unique potential compositions based on ppm error.
+#             Returns ([], []) if no match is found.
+#     """
+    
+#     # --- Foundational Constants ---
+#     ADDUCT_MASSES = {
+#         '[M+H]+': 1.007276,
+#         '[M+Na]+': 22.989218,
+#         '[M+NH4]+': 18.033823,
+#         '[M-H]-': -1.007276,
+#         '[M+HCOO]-': 44.998201,
+#         '[M+CH3COO]-': 59.013851,
+#         '[M+Cl]-': 34.969402,
+#         '[M-OH]+': -17.00328866 
+#     }
+
+#     # --- Lipid Class Formulas ---
+#     LIPID_RULES = [
+#         {'class': 'CE',    'constant_mass': 400.3300, 'tails': 1},
+#         {'class': 'DG',    'constant_mass': 120.0100, 'tails': 2},
+#         {'class': 'FA',    'constant_mass': 31.9898,  'tails': 1},
+#         {'class': 'PC',    'constant_mass': 285.0614, 'tails': 2},
+#         {'class': 'LPC',   'constant_mass': 271.0800, 'tails': 1},
+#         {'class': 'LPC-P',   'constant_mass': 486.3537, 'tails': 1},
+#         {'class': 'PE',    'constant_mass': 243.0143, 'tails': 2},
+#         {'class': 'PE-O',  'constant_mass': 229.0351, 'tails': 2},
+#         {'class': 'LPC-O', 'constant_mass': 257.1028, 'tails': 1},
+#         {'class': 'LPE',   'constant_mass': 229.0400, 'tails': 1},
+#         {'class': 'LPE-P',  'constant_mass': 447.3213, 'tails': 1},
+#         {'class': 'MG',    'constant_mass': 106.0266, 'tails': 1},
+#         {'class': 'NAE',   'constant_mass': 75.0317,  'tails': 1},
+#         {'class': 'PA',    'constant_mass': 199.9722, 'tails': 2},
+#         {'class': 'PG',    'constant_mass': 274.0090, 'tails': 2},
+#         {'class': 'PI',    'constant_mass': 362.0250, 'tails': 2},
+#         {'class': 'PS',    'constant_mass': 287.0042, 'tails': 2},
+#         {'class': 'PS',    'constant_mass': 269.9800, 'tails': 2},
+#     ]
+
+#     MASS_PER_CARBON = 14.01565006
+#     MASS_PER_2H = 2.01565006
+
+#     # 1. Calculate the neutral mass
+#     if adduct not in ADDUCT_MASSES:
+#         return [f"Adduct '{adduct}' not recognized."], []
+#     neutral_mass = precursor_mz - ADDUCT_MASSES[adduct]
+
+#     # Store results as a list of tuples: (ppm_error, class, composition)
+#     found_results = []
+
+#     # 2. Iterate through each lipid class rule
+#     for rule in LIPID_RULES:
+#         c_range = range(6, 27) if rule['tails'] == 1 else range(10, 51)
+#         db_range = range(0, 8) if rule['tails'] == 1 else range(0, 13)
+
+#         # 3. Iterate through possible chain compositions
+#         for C in c_range:
+#             for DB in db_range:
+#                 # 4. Calculate theoretical mass and ppm error
+#                 theoretical_mass = rule['constant_mass'] + (MASS_PER_CARBON * C) - (MASS_PER_2H * DB)
+                
+#                 if neutral_mass == 0:
+#                     continue
+                
+#                 mass_difference = abs(theoretical_mass - neutral_mass)
+#                 ppm_error = (mass_difference / neutral_mass) * 1e6
+
+#                 # 5. Check if it matches within tolerance
+#                 if ppm_error <= tolerance_ppm:
+#                     composition_str = f"{rule['class']} {C}:{DB}"
+#                     found_results.append((ppm_error, rule['class'], composition_str))
+    
+#     if not found_results:
+#         return [], []
+    
+#     # 6. Sort results by ppm_error (the first element of the tuple)
+#     found_results.sort(key=lambda x: x[0])
+    
+#     # Extract unique classes and compositions while preserving order
+#     sorted_classes = list(dict.fromkeys([res[1] for res in found_results]))
+#     sorted_compositions = list(dict.fromkeys([res[2] for res in found_results]))
+    
+#     return sorted_classes, sorted_compositions
+
+
+# def batch_identify_by_mass(df, tolerance_ppm=5.0):
+#     """
+#     Processes a DataFrame to identify lipid classes and compositions for each row,
+#     sorted by mass accuracy (ppm).
+
+#     Args:
+#         df (pd.DataFrame): A DataFrame containing 'precursor_mz' and 'adduct' columns.
+#         tolerance_ppm (float): The mass tolerance in ppm.
+
+#     Returns:
+#         pd.DataFrame: The input DataFrame with two new columns:
+#             - 'classes_mz': A list of possible lipid classes, sorted by ppm.
+#             - 'possible_name': A list of possible lipid compositions, sorted by ppm.
+#     """
+#     if not all(col in df.columns for col in ['precursor_mz', 'adduct']):
+#         raise ValueError("Input DataFrame must contain 'precursor_mz' and 'adduct' columns.")
+
+#     def process_row(row):
+#         return identify_class_by_mass(row['precursor_mz'], row['adduct'], tolerance_ppm)
+
+#     # Apply the function and expand the result into two new, renamed columns
+#     df[['classes_mz', 'possible_name']] = df.apply(
+#         process_row, axis=1, result_type='expand'
+#     )
+    
+#     return df
+
+import pandas as pd
+
+# --- Constants ---
+M_C = 12.00000  # Carbon-12 exact mass
+M_H = 1.00783   # Hydrogen-1 exact mass
+
+# Adduct masses
+ADDUCT_MASSES = {
+    '[M+H]+': 1.007276,
+    '[M+Na]+': 22.989218,
+    '[M+NH4]+': 18.033823,
+    '[M-H]-': -1.007276,
+    '[M+HCOO]-': 44.998201,
+    '[M+CH3COO]-': 59.013851,
+    '[M+Cl]-': 34.969402,
+    '[M-OH]+': -17.00328866
+}
+
+# Lipid class rules with constant (head) masses
+LIPID_RULES = [
+    {'class': 'BMP',    'constant_mass': 273.0},
+    {'class': 'CAR',    'constant_mass': 175.08},
+    {'class': 'CE',     'constant_mass': 399.33},
+    {'class': 'CL',     'constant_mass': 454.96},
+    {'class': 'DG',     'constant_mass': 119.0},
+    {'class': 'DG-O',   'constant_mass': 105.02},
+    {'class': 'DG-P',   'constant_mass': 103.0},
+    {'class': 'DGCC',   'constant_mass': 278.09},
+    {'class': 'DGDG',   'constant_mass': 443.1},
+    {'class': 'DGGA',   'constant_mass': 295.03},
+    {'class': 'DGTS',   'constant_mass': 262.09},
+    {'class': 'FA',     'constant_mass': 30.98},
+    {'class': 'LDGCC',  'constant_mass': 264.11},
+    {'class': 'LDGTS',  'constant_mass': 248.11},
+    {'class': 'LPA',    'constant_mass': 184.99},
+    {'class': 'LPC',    'constant_mass': 270.07},
+    {'class': 'LPC-O',  'constant_mass': 256.09},
+    {'class': 'LPE',    'constant_mass': 228.03},
+    {'class': 'LPE-O',  'constant_mass': 214.05},
+    {'class': 'LPG',    'constant_mass': 259.02},
+    {'class': 'LPI',    'constant_mass': 347.04},
+    {'class': 'LPS',    'constant_mass': 272.02},
+    {'class': 'MG',     'constant_mass': 105.02},
+    {'class': 'MG-O',   'constant_mass': 91.04},
+    {'class': 'MG-P',   'constant_mass': 89.02},
+    {'class': 'MGDG',   'constant_mass': 281.05},
+    {'class': 'NAE',    'constant_mass': 74.02},
+    {'class': 'PA',     'constant_mass': 198.96},
+    {'class': 'PA-O',   'constant_mass': 184.98},
+    {'class': 'PA-P',   'constant_mass': 182.97},
+    {'class': 'PC',     'constant_mass': 284.05},
+    {'class': 'PC-O',   'constant_mass': 270.07},
+    {'class': 'PC-P',   'constant_mass': 268.06},
+    {'class': 'PE',     'constant_mass': 242.01},
+    {'class': 'PE-O',   'constant_mass': 228.03},
+    {'class': 'PE-P',   'constant_mass': 226.01},
+    {'class': 'PG',     'constant_mass': 273.0},
+    {'class': 'PG-O',   'constant_mass': 259.02},
+    {'class': 'PG-P',   'constant_mass': 257.01},
+    {'class': 'PI',     'constant_mass': 361.02},
+    {'class': 'PI-O',   'constant_mass': 347.04},
+    {'class': 'PI-P',   'constant_mass': 345.02},
+    {'class': 'PMeOH',  'constant_mass': 212.98},
+    {'class': 'PS',     'constant_mass': 286.0},
+    {'class': 'PS-O',   'constant_mass': 272.02},
+    {'class': 'PS-P',   'constant_mass': 270.0},
+    {'class': 'SE',     'constant_mass': 22.92},
+    {'class': 'SM-d',   'constant_mass': 227.04},
+    {'class': 'SM-t',   'constant_mass': 243.04},
+    {'class': 'SQDG',   'constant_mass': 345.01},
+    {'class': 'TG',     'constant_mass': 132.98},
+    {'class': 'TG-O',   'constant_mass': 119.0},
+    {'class': 'WE',     'constant_mass': 30.98}
+]
+
+
 def identify_class_by_mass(precursor_mz, adduct, tolerance_ppm=15.0):
     """
-    Identifies potential lipid classes and compositions by matching the precursor m/z.
-
-    This function calculates the neutral mass from the precursor m/z and adduct, then
-    iterates through possible lipid compositions. If a theoretical mass matches the
-    neutral mass within the specified ppm tolerance, the class, its specific
-    composition, and the ppm error are recorded. Results are sorted by ppm error.
-
-    Args:
-        precursor_mz (float): The experimentally observed mass-to-charge ratio.
-        adduct (str): The adduct type (e.g., '[M+H]+', '[M-H]-').
-        tolerance_ppm (float): The mass tolerance in parts-per-million (ppm).
-
-    Returns:
-        tuple: A tuple containing two lists:
-            - A sorted list of unique potential lipid class abbreviations based on ppm error.
-            - A sorted list of unique potential compositions based on ppm error.
-            Returns ([], []) if no match is found.
-    """
+    Identifies potential lipid classes and compositions by matching the precursor m/z
+    using exact atomic masses for Carbon and Hydrogen.
     
-    # --- Foundational Constants ---
-    ADDUCT_MASSES = {
-        '[M+H]+': 1.007276,
-        '[M+Na]+': 22.989218,
-        '[M+NH4]+': 18.033823,
-        '[M-H]-': -1.007276,
-        '[M+HCOO]-': 44.998201,
-        '[M+CH3COO]-': 59.013851,
-        '[M+Cl]-': 34.969402,
-        '[M-OH]+': -17.00328866 
-    }
-
-    # --- Lipid Class Formulas ---
-    LIPID_RULES = [
-        {'class': 'CE',    'constant_mass': 400.3300, 'tails': 1},
-        {'class': 'DG',    'constant_mass': 120.0100, 'tails': 2},
-        {'class': 'FA',    'constant_mass': 31.9898,  'tails': 1},
-        {'class': 'PC',    'constant_mass': 285.0614, 'tails': 2},
-        {'class': 'LPC',   'constant_mass': 271.0800, 'tails': 1},
-        {'class': 'LPC-P',   'constant_mass': 486.3537, 'tails': 1},
-        {'class': 'PE',    'constant_mass': 243.0143, 'tails': 2},
-        {'class': 'PE-O',  'constant_mass': 229.0351, 'tails': 2},
-        {'class': 'LPC-O', 'constant_mass': 257.1028, 'tails': 1},
-        {'class': 'LPE',   'constant_mass': 229.0400, 'tails': 1},
-        {'class': 'LPE-P',  'constant_mass': 447.3213, 'tails': 1},
-        {'class': 'MG',    'constant_mass': 106.0266, 'tails': 1},
-        {'class': 'NAE',   'constant_mass': 75.0317,  'tails': 1},
-        {'class': 'PA',    'constant_mass': 199.9722, 'tails': 2},
-        {'class': 'PG',    'constant_mass': 274.0090, 'tails': 2},
-        {'class': 'PI',    'constant_mass': 362.0250, 'tails': 2},
-        {'class': 'PS',    'constant_mass': 287.0042, 'tails': 2},
-        {'class': 'PS',    'constant_mass': 269.9800, 'tails': 2},
-    ]
-
-    MASS_PER_CARBON = 14.01565006
-    MASS_PER_2H = 2.01565006
-
-    # 1. Calculate the neutral mass
+    Args:
+        precursor_mz (float): The measured precursor m/z value.
+        adduct (str): The adduct type (e.g., '[M+H]+', '[M-H]-').
+        tolerance_ppm (float): Mass tolerance in ppm (default: 15.0).
+    
+    Returns:
+        tuple: (sorted_classes, sorted_compositions) - lists sorted by mass accuracy (ppm).
+               sorted_classes: List of lipid class names.
+               sorted_compositions: List of lipid compositions (e.g., 'PC 34:1').
+    """
+    # Validate adduct
     if adduct not in ADDUCT_MASSES:
-        return [f"Adduct '{adduct}' not recognized."], []
-    neutral_mass = precursor_mz - ADDUCT_MASSES[adduct]
-
-    # Store results as a list of tuples: (ppm_error, class, composition)
-    found_results = []
-
-    # 2. Iterate through each lipid class rule
+        raise ValueError(f"Unknown adduct: {adduct}. Available adducts: {list(ADDUCT_MASSES.keys())}")
+    
+    # Calculate neutral mass from precursor m/z
+    adduct_mass = ADDUCT_MASSES[adduct]
+    neutral_mass = precursor_mz - adduct_mass
+    
+    matches = []
+    
     for rule in LIPID_RULES:
-        c_range = range(6, 27) if rule['tails'] == 1 else range(10, 51)
-        db_range = range(0, 8) if rule['tails'] == 1 else range(0, 13)
-
-        # 3. Iterate through possible chain compositions
-        for C in c_range:
-            for DB in db_range:
-                # 4. Calculate theoretical mass and ppm error
-                theoretical_mass = rule['constant_mass'] + (MASS_PER_CARBON * C) - (MASS_PER_2H * DB)
+        lipid_class = rule['class']
+        head_mass = rule['constant_mass']
+        
+        # Calculate expected tail mass
+        target_tail_mass = neutral_mass - head_mass
+        
+        # Skip if tail mass is unreasonable (too small)
+        if target_tail_mass < 50:
+            continue
+        
+        # Estimate reasonable carbon range based on target tail mass
+        # Approximation: tail_mass ≈ 14.02 * num_c (average CH2 mass)
+        min_c = max(2, int(target_tail_mass / 16) - 5)
+        max_c = min(100, int(target_tail_mass / 12) + 5)
+        
+        for num_c in range(min_c, max_c + 1):
+            # Max double bonds: limited by chemistry (typically ≤ num_c/2)
+            max_db = min(num_c // 2, 15)
+            
+            for num_db in range(0, max_db + 1):
+                # Calculate number of hydrogens using the formula:
+                # num_h = (2 * num_c + 1) - (2 * num_db)
+                num_h = (2 * num_c + 1) - (2 * num_db)
                 
-                if neutral_mass == 0:
+                if num_h < 1:  # Invalid composition
                     continue
                 
-                mass_difference = abs(theoretical_mass - neutral_mass)
-                ppm_error = (mass_difference / neutral_mass) * 1e6
-
-                # 5. Check if it matches within tolerance
+                # Calculate theoretical tail mass
+                theoretical_tail_mass = (num_c * M_C) + (num_h * M_H)
+                
+                # Calculate theoretical neutral mass
+                theoretical_neutral_mass = head_mass + theoretical_tail_mass
+                
+                # Calculate ppm error
+                ppm_error = abs((neutral_mass - theoretical_neutral_mass) / theoretical_neutral_mass * 1e6)
+                
                 if ppm_error <= tolerance_ppm:
-                    composition_str = f"{rule['class']} {C}:{DB}"
-                    found_results.append((ppm_error, rule['class'], composition_str))
+                    composition = f"{lipid_class} {num_c}:{num_db}"
+                    matches.append({
+                        'class': lipid_class,
+                        'composition': composition,
+                        'ppm_error': ppm_error,
+                        'num_c': num_c,
+                        'num_db': num_db,
+                        'theoretical_mass': theoretical_neutral_mass + adduct_mass
+                    })
     
-    if not found_results:
-        return [], []
+    # Sort by ppm error (best matches first)
+    matches.sort(key=lambda x: x['ppm_error'])
     
-    # 6. Sort results by ppm_error (the first element of the tuple)
-    found_results.sort(key=lambda x: x[0])
+    # Extract sorted lists
+    sorted_classes = [m['class'] for m in matches]
+    sorted_compositions = [m['composition'] for m in matches]
     
-    # Extract unique classes and compositions while preserving order
-    sorted_classes = list(dict.fromkeys([res[1] for res in found_results]))
-    sorted_compositions = list(dict.fromkeys([res[2] for res in found_results]))
-    
-    return sorted_classes, sorted_compositions
+    return (sorted_classes, sorted_compositions)
 
 
 def batch_identify_by_mass(df, tolerance_ppm=5.0):
     """
     Processes a DataFrame to identify lipid classes and compositions for each row,
     sorted by mass accuracy (ppm).
-
+    
     Args:
         df (pd.DataFrame): A DataFrame containing 'precursor_mz' and 'adduct' columns.
-        tolerance_ppm (float): The mass tolerance in ppm.
-
+        tolerance_ppm (float): The mass tolerance in ppm (default: 15.0).
+    
     Returns:
         pd.DataFrame: The input DataFrame with two new columns:
             - 'classes_mz': A list of possible lipid classes, sorted by ppm.
             - 'possible_name': A list of possible lipid compositions, sorted by ppm.
     """
-    if not all(col in df.columns for col in ['precursor_mz', 'adduct']):
-        raise ValueError("Input DataFrame must contain 'precursor_mz' and 'adduct' columns.")
-
-    def process_row(row):
-        return identify_class_by_mass(row['precursor_mz'], row['adduct'], tolerance_ppm)
-
-    # Apply the function and expand the result into two new, renamed columns
-    df[['classes_mz', 'possible_name']] = df.apply(
-        process_row, axis=1, result_type='expand'
-    )
+    result_df = df.copy()
     
-    return df
+    classes_list = []
+    compositions_list = []
+    
+    for idx, row in df.iterrows():
+        try:
+            precursor_mz = row['precursor_mz']
+            adduct = row['adduct']
+            
+            # Skip rows with missing data
+            if pd.isna(precursor_mz) or pd.isna(adduct):
+                classes_list.append([])
+                compositions_list.append([])
+                continue
+            
+            # Identify classes and compositions
+            classes, compositions = identify_class_by_mass(
+                precursor_mz,
+                adduct,
+                tolerance_ppm
+            )
+            classes_list.append(classes)
+            compositions_list.append(compositions)
+            
+        except (ValueError, KeyError) as e:
+            # Handle errors gracefully
+            classes_list.append([])
+            compositions_list.append([])
+    
+    result_df['classes_mz'] = classes_list
+    result_df['possible_name'] = compositions_list
+    
+    return result_df
 
 
 # --- MS2 Identification Section ---

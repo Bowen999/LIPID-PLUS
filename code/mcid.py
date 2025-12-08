@@ -8,14 +8,13 @@ import math
 from rdkit import Chem
 
 
-
-# 1. Molecular representation
-#     __  ___      __                __                                                        __        __  _           
-#    /  |/  /___  / /__  _______  __/ /___ ______   ________  ____  ________  ________  ____  / /_____ _/ /_(_)___  ____ 
-#   / /|_/ / __ \/ / _ \/ ___/ / / / / __ `/ ___/  / ___/ _ \/ __ \/ ___/ _ \/ ___/ _ \/ __ \/ __/ __ `/ __/ / __ \/ __  
-#  / /  / / /_/ / /  __/ /__/ /_/ / / /_/ / /     / /  /  __/ /_/ / /  /  __(__  )  __/ / / / /_/ /_/ / /_/ / /_/ / / / /
-# /_/  /_/\____/_/\___/\___/\__,_/_/\__,_/_/     /_/   \___/ .___/_/   \___/____/\___/_/ /_/\__/\__,_/\__/_/\____/_/ /_/ 
-#                                                         /_/                                                            
+"""
+# Molecular representation
+▖  ▖  ▜       ▜                       ▗   ▗ ▘      ▖  ▖  ▜       ▜                       ▗   ▗ ▘    
+▛▖▞▌▛▌▐ █▌▛▘▌▌▐ ▀▌▛▘  ▛▘█▌▛▌▛▘█▌▛▘█▌▛▌▜▘▀▌▜▘▌▛▌▛▌  ▛▖▞▌▛▌▐ █▌▛▘▌▌▐ ▀▌▛▘  ▛▘█▌▛▌▛▘█▌▛▘█▌▛▌▜▘▀▌▜▘▌▛▌▛▌
+▌▝ ▌▙▌▐▖▙▖▙▖▙▌▐▖█▌▌   ▌ ▙▖▙▌▌ ▙▖▄▌▙▖▌▌▐▖█▌▐▖▌▙▌▌▌  ▌▝ ▌▙▌▐▖▙▖▙▖▙▌▐▖█▌▌   ▌ ▙▖▙▌▌ ▙▖▄▌▙▖▌▌▐▖█▌▐▖▌▙▌▌▌
+                          ▌                                                  ▌                      
+"""
 
 
 # --- Function 1: InChI String to SMILES String ---
@@ -230,244 +229,92 @@ def add_ref_list_column(df: pd.DataFrame, output_col_name: str = 'ref') -> pd.Da
 
 
 
+
+
+
+
+
+
 """
-2. MS2 Processing
-
-    __  ___________      ____                                 _            
-   /  |/  / ___/__ \    / __ \_________  ________  __________(_)___  ____ _
-  / /|_/ /\__ \__/ /   / /_/ / ___/ __ \/ ___/ _ \/ ___/ ___/ / __ \/ __ `/
- / /  / /___/ / __/   / ____/ /  / /_/ / /__/  __(__  |__  ) / / / / /_/ / 
-/_/  /_//____/____/  /_/   /_/   \____/\___/\___/____/____/_/_/ /_/\__, /  
-                                                                  /____/   
+proprety
+            ▗                 ▗                 ▗   
+▛▌▛▘▛▌▛▌▛▘█▌▜▘▌▌  ▛▌▛▘▛▌▛▌█▌▛▘▜▘▌▌  ▛▌▛▘▛▌▛▌█▌▛▘▜▘▌▌
+▙▌▌ ▙▌▙▌▌ ▙▖▐▖▙▌  ▙▌▌ ▙▌▙▌▙▖▌ ▐▖▙▌  ▙▌▌ ▙▌▙▌▙▖▌ ▐▖▙▌
+▌     ▌       ▄▌  ▌     ▌       ▄▌  ▌     ▌       ▄▌
 """
 
 
-
-# def ms2_format(ms2_string):
-#     """
-#     Converts a string representation of an MS2 spectrum to a Python list.
-#     e.g., '[[100.1, 999], [102.2, 500]]' -> [[100.1, 999], [102.2, 500]]
-
-#     Args:
-#         ms2_string (str): The string to convert.
-
-#     Returns:
-#         list: A list of [mz, intensity] pairs, or an empty list if conversion fails.
-#     """
-#     if not isinstance(ms2_string, str):
-#         # If it's already a list (or None/NaN), just return it or an empty list
-#         return ms2_string if isinstance(ms2_string, list) else []
+def calculate_exact_mass(df):
+    """
+    Calculate exact mass from precursor_mz and adduct
     
-#     try:
-#         # Use ast.literal_eval for safe parsing of Python literals
-#         result = ast.literal_eval(ms2_string)
-#         if isinstance(result, list):
-#             return result
-#         else:
-#             return []
-#     except (ValueError, SyntaxError):
-#         # Handle malformed strings
-#         return []
-
-# def ms2_format_df_process(df):
-#     """
-#     Applies the ms2_format function to the 'MS2' column of a DataFrame.
-#     This modifies the DataFrame in place.
-
-#     Args:
-#         df (pd.DataFrame): The DataFrame with an 'MS2' column containing string spectra.
-
-#     Returns:
-#         pd.DataFrame: The DataFrame with the 'MS2' column converted to lists.
-#     """
-#     if 'MS2' in df.columns:
-#         df['MS2'] = df['MS2'].apply(ms2_format)
-#     return df
-
-# def process_ms2_norm_row(row):
-#     """
-#     Helper function for ms2_norm to process a single row.
-#     Performs normalization, filtering, and peak counting.
-#     """
-#     ms2_list = row['MS2']
-    
-#     # Ensure ms2_list is a list (it might be a string if ms2_format_df_process wasn't run)
-#     if isinstance(ms2_list, str):
-#         ms2_list = ms2_format(ms2_list)
-    
-#     if not ms2_list or not isinstance(ms2_list, list):
-#         return pd.Series({'MS2_norm': [], 'num_peaks': 0})
-
-#     # Extract intensities
-#     try:
-#         intensities = [peak[1] for peak in ms2_list if isinstance(peak, (list, tuple)) and len(peak) == 2]
-#     except (IndexError, TypeError):
-#         return pd.Series({'MS2_norm': [], 'num_peaks': 0})
-
-#     if not intensities:
-#         return pd.Series({'MS2_norm': [], 'num_peaks': 0})
-
-#     min_int = min(intensities)
-#     max_int = max(intensities)
-#     denom = max_int - min_int
-
-#     ms2_norm_list = []
-    
-#     for peak in ms2_list:
-#         if not (isinstance(peak, (list, tuple)) and len(peak) == 2):
-#             continue
-
-#         mz, intensity = peak
+    Args:
+        df: DataFrame with 'precursor_mz' and 'adduct' columns
         
-#         # Normalize intensity from 0 to 100
-#         if denom == 0:
-#             # Handle case where all intensities are the same
-#             norm_int = 100.0 if intensity > 0 else 0.0
-#         else:
-#             norm_int = (intensity - min_int) * 100.0 / denom
-        
-#         # Round to 1 decimal place
-#         norm_int = round(norm_int, 0)
-
-#         # Keep only peaks with intensity > 3
-#         if norm_int > 3:
-#             ms2_norm_list.append([mz, norm_int])
-
-#     num_peaks = len(ms2_norm_list)
-#     return pd.Series({'MS2_norm': ms2_norm_list, 'num_peaks': num_peaks})
-
-# def ms2_norm(df):
-#     """
-#     Generates 'MS2_norm' and 'num_peaks' columns based on the 'MS2' column.
-#     'MS2_norm' contains peaks with intensities normalized (0-100), rounded to 1
-#     decimal, and filtered for intensity > 3.
-#     'num_peaks' is the count of peaks in 'MS2_norm'.
-
-#     Args:
-#         df (pd.DataFrame): DataFrame with an 'MS2' column.
-
-#     Returns:
-#         pd.DataFrame: The DataFrame with 'MS2_norm' and 'num_peaks' columns added.
-#     """
-#     if 'MS2' not in df.columns:
-#         print("Error: 'MS2' column not found.")
-#         return df
-
-#     # Apply the helper function row-wise
-#     new_cols = df.apply(process_ms2_norm_row, axis=1)
+    Returns:
+        DataFrame with added 'exact_mass' column
+    """
+    # Adduct mass adjustments (in Da)
+    adduct_adjustments = {
+        '[M]+': 0.0,
+        '[M+H]+': -1.00783,
+        '[M+NH4]+': -18.03383,
+        '[M+Na]+': -22.98977,
+        '[M+K]+': -38.96371,
+        '[M-H]-': 1.00783,
+        '[M+HCOO]-': -44.99820,
+        '[M+CH3COO]-': -59.01385,
+        '[2M+H]+': -1.00783,
+        '[2M+Na]+': -22.98977,
+        '[2M-H]-': 1.00783,
+        '[M-H2O+H]+': 17.00274,
+        '[M-2H2O+H]+': 35.01311,
+        '[M+H-H2O]+': 17.00274,
+        '[M+]+': 0.0,
+        '[M]': 0.0,
+        '[M-H1]-': 1.00783,
+        '[M+CH3COOH-H]-': -59.01385
+    }
     
-#     # Concatenate the new columns with the original DataFrame
-#     df = pd.concat([df, new_cols], axis=1)
-#     return df
-
-# def ms2_norm_binning(df, decimal_point=0):
-#     """
-#     Creates binned m/z columns (e.g., 'mz_50', 'mz_51', ..., 'mz_1500')
-#     based on the 'MS2_norm' column. The value in each bin column is the
-#     intensity of the peak if present, otherwise 0.
-
-#     Args:
-#         df (pd.DataFrame): DataFrame with 'MS2_norm' column.
-#         decimal_point (int): The number of decimal points for m/z binning.
-#                              0 creates bins 50, 51, ...
-#                              1 creates bins 50.0, 50.1, ...
-
-#     Returns:
-#         pd.DataFrame: The DataFrame with m/z bin columns added.
-#     """
-#     if 'MS2_norm' not in df.columns:
-#         print("Error: 'MS2_norm' column not found. Run ms2_norm first.")
-#         return df
-
-#     min_mz_bin = 50
-#     max_mz_bin = 1500
-
-#     # Generate column names and bins
-#     if decimal_point == 0:
-#         bins = range(min_mz_bin, max_mz_bin + 1)
-#         col_names = [f"mz_{b}" for b in bins]
-#     else:
-#         multiplier = 10 ** decimal_point
-#         start = int(min_mz_bin * multiplier)
-#         end = int(max_mz_bin * multiplier)
+    exact_masses = []
+    for idx, row in df.iterrows():
+        precursor_mz = row['precursor_mz']
+        adduct = row['adduct']
         
-#         # Use list comprehension for float ranges
-#         bins = [i / multiplier for i in range(start, end + 1)]
-#         col_names = [f"mz_{b:.{decimal_point}f}" for b in bins]
-    
-#     # Create a set for fast lookup
-#     all_bin_cols_set = set(col_names)
-    
-#     binned_data = []
-
-#     # Iterate over each row in the DataFrame
-#     for index, row in df.iterrows():
-#         # Initialize a dictionary for this row's bins, all set to 0
-#         row_bins = {col: 0.0 for col in col_names}
-        
-#         ms2_norm_list = row['MS2_norm']
-#         if not isinstance(ms2_norm_list, list):
-#             binned_data.append(row_bins)
-#             continue
+        if adduct in adduct_adjustments:
+            adjustment = adduct_adjustments[adduct]
+            exact_mass = precursor_mz + adjustment
             
-#         # Use a temporary dict to handle multiple peaks in the same bin
-#         # We'll take the max intensity
-#         temp_bins = {}
-
-#         for mz, intensity in ms2_norm_list:
-#             rounded_mz = round(mz, decimal_point)
-            
-#             # Generate the column name for this m/z
-#             if decimal_point == 0:
-#                 col_name = f"mz_{int(rounded_mz)}"
-#             else:
-#                 col_name = f"mz_{rounded_mz:.{decimal_point}f}"
-            
-#             # If this is a valid bin we are tracking
-#             if col_name in all_bin_cols_set:
-#                 # If bin not seen yet, or new intensity is higher, update it
-#                 if col_name not in temp_bins or intensity > temp_bins[col_name]:
-#                     temp_bins[col_name] = intensity
-        
-#         # Update the row's bins with the intensities found
-#         row_bins.update(temp_bins)
-#         binned_data.append(row_bins)
-
-#     # Create a new DataFrame from the binned data
-#     binned_df = pd.DataFrame(binned_data, index=df.index)
+            # Handle dimers (2M adducts)
+            if '2M' in adduct:
+                exact_mass = exact_mass / 2.0
+                
+            exact_masses.append(exact_mass)
+        else:
+            # Unknown adduct, use precursor_mz as is
+            print(f"Warning: Unknown adduct '{adduct}' at index {idx}, using precursor_mz as exact_mass")
+            exact_masses.append(precursor_mz)
     
-#     # Concatenate with the original DataFrame
-#     df = pd.concat([df, binned_df], axis=1)
-#     return df
+    df['exact_mass'] = exact_masses
+    return df
 
 
-    
-# def process_ms2_df(df, decimal_point=0):
-#     """
-#     Runs the complete MS2 processing pipeline on a DataFrame.
 
-#     This function is a convenience wrapper that calls:
-#     1. ms2_norm (which includes formatting, normalization, and peak counting)
-#     2. ms2_norm_binning
 
-#     Args:
-#         df (pd.DataFrame): The input DataFrame with an 'MS2' column.
-#         decimal_point (int): The number of decimal points for m/z binning.
 
-#     Returns:
-#         pd.DataFrame: The fully processed DataFrame.
-#     """
-#     print(f"Starting processing with decimal_point={decimal_point}...")
-    
-#     # Step 1: Normalize, filter, and count peaks.
-#     # This also handles the string-to-list conversion internally.
-#     df_norm = ms2_norm(df)
-    
-#     # Step 2: Bin the normalized data
-#     df_binned = ms2_norm_binning(df_norm, decimal_point=decimal_point)
-    
-#     print("Processing complete.")
-#     return df_binned
+
+
+
+
+
+
+"""
+MS2 Processing
+▖  ▖▄▖  ▄▖            ▘      ▖  ▖▄▖  ▄▖            ▘      ▖  ▖▄▖  ▄▖            ▘    
+▛▖▞▌▚   ▙▌▛▘▛▌▛▘█▌▛▘▛▘▌▛▌▛▌  ▛▖▞▌▚   ▙▌▛▘▛▌▛▘█▌▛▘▛▘▌▛▌▛▌  ▛▖▞▌▚   ▙▌▛▘▛▌▛▘█▌▛▘▛▘▌▛▌▛▌
+▌▝ ▌▄▌  ▌ ▌ ▙▌▙▖▙▖▄▌▄▌▌▌▌▙▌  ▌▝ ▌▄▌  ▌ ▌ ▙▌▙▖▙▖▄▌▄▌▌▌▌▙▌  ▌▝ ▌▄▌  ▌ ▌ ▙▌▙▖▙▖▄▌▄▌▌▌▌▙▌
+                         ▄▌                           ▄▌                           ▄▌
+"""
 
 def ms2_format(ms2_string):
     """
@@ -728,3 +575,180 @@ def process_ms2_df(df, decimal_point=0, neutral_loss=False, keep_intensity=True)
     
     print("Processing complete.")
     return df_binned
+
+
+
+
+
+
+
+
+
+"""
+Lipid Spcialty
+▜ ▘  ▘ ▌  ▜ ▘  ▘ ▌  ▜ ▘  ▘ ▌  ▜ ▘  ▘ ▌  ▜ ▘  ▘ ▌
+▐ ▌▛▌▌▛▌  ▐ ▌▛▌▌▛▌  ▐ ▌▛▌▌▛▌  ▐ ▌▛▌▌▛▌  ▐ ▌▛▌▌▛▌
+▐▖▌▙▌▌▙▌  ▐▖▌▙▌▌▙▌  ▐▖▌▙▌▌▙▌  ▐▖▌▙▌▌▙▌  ▐▖▌▙▌▌▙▌
+   ▌         ▌         ▌         ▌         ▌    
+          
+"""
+
+def find_best_composition(df, ms1_tolerance=30.0):
+    """
+    Reverse engineer num_c and num_db from exact_mass and lipid class
+    
+    Args:
+        df: DataFrame with 'exact_mass' and 'class' columns
+        ms1_tolerance: PPM tolerance for mass matching (default: 30.0)
+        
+    Returns:
+        DataFrame with added 'num_c' and 'num_db' columns
+        
+    Notes:
+        - Returns None for both if no match found within tolerance
+        - Returns None for both if lipid class is unknown
+    """
+    # Internal constants
+    M_C = 12.00000
+    M_H = 1.00783
+    M_CH2 = M_C + (2 * M_H)
+    
+    # Head group masses for different lipid classes (in Da)
+    head_mass_refs = {
+        'BMP': 273.0, 'CAR': 175.08, 'CE': 399.33, 'CL': 454.96, 'DG': 119.0,
+        'DG-O': 105.02, 'DG-P': 103.0, 'DGCC': 278.09, 'DGDG': 443.1, 'DGGA': 295.03,
+        'DGTS': 262.09, 'FA': 30.98, 'LDGCC': 264.11, 'LDGTS': 248.11, 'LPA': 184.99,
+        'LPC': 270.07, 'LPC-O': 256.09, 'LPE': 228.03, 'LPE-O': 214.05, 'LPG': 259.02,
+        'LPI': 347.04, 'LPS': 272.02, 'MG': 105.02, 'MG-O': 91.04, 'MG-P': 89.02,
+        'MGDG': 281.05, 'NAE': 74.02, 'PA': 198.96, 'PA-O': 184.98, 'PA-P': 182.97,
+        'PC': 284.05, 'PC-O': 270.07, 'PC-P': 268.06, 'PE': 242.01, 'PE-O': 228.03,
+        'PE-P': 226.01, 'PG': 273.0, 'PG-O': 259.02, 'PG-P': 257.01, 'PI': 361.02,
+        'PI-O': 347.04, 'PI-P': 345.02, 'PMeOH': 212.98, 'PS': 286.0, 'PS-O': 272.02,
+        'PS-P': 270.0, 'SE': 22.92, 'SM-d': 227.04, 'SM-t': 243.04, 'SQDG': 345.01,
+        'TG': 132.98, 'TG-O': 119.0, 'WE': 30.98
+    }
+    
+    def _solve_row(row):
+        """Find best C and DB for a single row"""
+        obs_mass = row['exact_mass']
+        cls = row['class']
+        
+        # Unknown class
+        if cls not in head_mass_refs:
+            return None, None
+        
+        h_mass = head_mass_refs[cls]
+        target_tail = obs_mass - h_mass
+        
+        # Invalid tail mass
+        if target_tail <= 0:
+            return None, None
+        
+        # Estimate carbon count and search window
+        c_estimate = int(target_tail / M_CH2)
+        c_min = max(1, c_estimate - 5)
+        c_max = c_estimate + 5
+        
+        best_ppm = float('inf')
+        best_match = (None, None)
+        
+        # Search for best C and DB combination
+        for c in range(c_min, c_max + 1):
+            for db in range(0, 13):  # Max 12 double bonds
+                if db >= c:
+                    break
+                
+                # Calculate theoretical mass
+                h = (2 * c + 1) - (2 * db)
+                tail_mass = (c * M_C) + (h * M_H)
+                theoretical_total = h_mass + tail_mass
+                
+                # Calculate error in ppm
+                error_mass = abs(obs_mass - theoretical_total)
+                ppm = (error_mass / obs_mass) * 1_000_000
+                
+                # Check if within tolerance
+                if ppm <= ms1_tolerance:
+                    if ppm < best_ppm:
+                        best_ppm = ppm
+                        best_match = (c, db)
+        
+        return best_match
+    
+    # Apply to all rows
+    results = df.apply(_solve_row, axis=1)
+    
+    # Add columns
+    df['num_c'] = [x[0] for x in results]
+    df['num_db'] = [x[1] for x in results]
+    
+    # Convert to numeric (allows NaN for None values)
+    df['num_c'] = pd.to_numeric(df['num_c'], errors='coerce')
+    df['num_db'] = pd.to_numeric(df['num_db'], errors='coerce')
+    
+    return df
+
+
+def get_supported_adducts():
+    """
+    Get list of supported adduct types
+    
+    Returns:
+        List of supported adduct strings
+    """
+    return [
+        '[M]+', '[M+H]+', '[M+NH4]+', '[M+Na]+', '[M+K]+',
+        '[M-H]-', '[M+HCOO]-', '[M+CH3COO]-',
+        '[2M+H]+', '[2M+Na]+', '[2M-H]-',
+        '[M-H2O+H]+', '[M-2H2O+H]+', '[M+H-H2O]+',
+        '[M+]+', '[M]', '[M-H1]-', '[M+CH3COOH-H]-'
+    ]
+
+
+def get_supported_lipid_classes():
+    """
+    Get list of supported lipid classes
+    
+    Returns:
+        List of supported lipid class strings
+    """
+    return [
+        'BMP', 'CAR', 'CE', 'CL', 'DG', 'DG-O', 'DG-P', 'DGCC', 'DGDG', 'DGGA',
+        'DGTS', 'FA', 'LDGCC', 'LDGTS', 'LPA', 'LPC', 'LPC-O', 'LPE', 'LPE-O',
+        'LPG', 'LPI', 'LPS', 'MG', 'MG-O', 'MG-P', 'MGDG', 'NAE', 'PA', 'PA-O',
+        'PA-P', 'PC', 'PC-O', 'PC-P', 'PE', 'PE-O', 'PE-P', 'PG', 'PG-O', 'PG-P',
+        'PI', 'PI-O', 'PI-P', 'PMeOH', 'PS', 'PS-O', 'PS-P', 'SE', 'SM-d', 'SM-t',
+        'SQDG', 'TG', 'TG-O', 'WE'
+    ]
+
+
+def validate_input_data(df):
+    """
+    Validate input DataFrame has required columns
+    
+    Args:
+        df: DataFrame to validate
+        
+    Returns:
+        Tuple of (is_valid, error_message)
+        
+    Example:
+        >>> valid, error = validate_input_data(df)
+        >>> if not valid:
+        >>>     print(f"Error: {error}")
+    """
+    required_cols = ['precursor_mz', 'adduct', 'class']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    
+    if missing_cols:
+        return False, f"Missing required columns: {missing_cols}"
+    
+    # Check for null values
+    for col in required_cols:
+        if df[col].isna().any():
+            null_count = df[col].isna().sum()
+            return False, f"Column '{col}' has {null_count} null values"
+    
+    return True, None
+
+

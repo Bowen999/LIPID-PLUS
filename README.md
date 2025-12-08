@@ -2,7 +2,7 @@
 
 ![LIPID PLUS](https://github.com/Bowen999/lipid-plus-docs/blob/main/images/lipid_plus_pipeline.png)
 
-**LIPID+** is a machine learning-powered platform designed to overcome critical bottlenecks in lipidomics. By shifting analytical focus from unattainable complete structures to primary lipid structural features, LIPID+ provides accurate, comprehensive, and scalable lipid identification, specifically targeting the dark lipidome where reference spectra are missing.
+[**LIPID+**](https://bowen999.github.io/lipid-plus-docs) is a machine learning-powered platform designed to overcome critical bottlenecks in lipidomics. By shifting analytical focus from unattainable complete structures to primary lipid structural features, LIPID+ provides accurate, comprehensive, and scalable lipid identification, specifically targeting the dark lipidome where reference spectra are missing.
 
 **Key Functions & Features**
 * **Pure Lipids MS Database**: A large-scale, curated lipid database containing lipids from diverse sources, along with their precursor m/z values and corresponding MS² spectra, enables high-throughput mass spectral searching.  
@@ -16,10 +16,10 @@
 git clone https://github.com/Bowen999/LIPID-PLUS.git
 cd LIPID-PLUS
 mkdir -p dataset
-wget -O dataset/lipid_plus.db https://github.com/Bowen999/LIPID-PLUS/releases/download/v0.0.0/lipid_plus.db
+wget -O dataset/lipid_plus.db https://github.com/Bowen999/LIPID-PLUS/releases/download/v1.0/lipid_plus.db
 
 # (if no wget，use curl)
-# curl -L -o dataset/lipid_plus.db https://github.com/Bowen999/LIPID-PLUS/releases/download/v0.0.0/lipid_plus.db
+# curl -L -o dataset/lipid_plus.db https://github.com/Bowen999/LIPID-PLUS/releases/download/v1.0/lipid_plus.db
 ```
 
 ### Install the dependencies 
