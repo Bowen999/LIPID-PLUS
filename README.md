@@ -43,7 +43,8 @@ python run.py feature_df.csv
 
 The usage of the pipeline with **custom parameters** can be found in the `Advanced Usage` section of [Docs](https://bowen999.github.io/lipid-plus-docs/docs.html).  
 
-The pipeline will generate several files in the `results/` directory. **Main result file**: `results/final_annotations.csv` contains your complete lipid annotations, the `name` column displays the final search/prediction results.
+The pipeline will generate several files in the `results/` directory.   
+ **Main result file**: `results/final_annotations.csv` contains the complete lipid annotations result, search/prediction are recorded in `name` column.
 
 ```text
 results/
@@ -74,6 +75,7 @@ python code/report_generate.py \
 
 **Note: To run this process, the input file must contain at least 3 groups along with intensity or concentration values, and user must adjust the `groups, group_1, and group_2` parameters to match the experimental design.**
 
+
 | Parameter | Type | Description |
 | :--- | :--- | :--- | :--- |
 | `--input_path` | `String` | The file path to the identification result|
@@ -81,8 +83,9 @@ python code/report_generate.py \
 | `--group_1` | `String`| The first group for differential analysis. Must be in `--groups`. |
 | `--group_2` | `String` | The second group for differential analysis. Must be in `--groups`. |
 
+
 # More Information
-**For Advance Usage, please look at [Docs](https://bowen999.github.io/lipid-plus-docs/docs.html)**
+For Advance Usage, please look at **[Docs](https://bowen999.github.io/lipid-plus-docs/docs.html)**
 
 # Contact
 If you have any questions, please reach out to by8@ualberta.ca
