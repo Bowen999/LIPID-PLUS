@@ -893,7 +893,112 @@ def create_themeriver(
     c.render(filename)
     print(f"✅ Report saved successfully to '{filename}'")
     
+
+
+def create_category_themeriver(
+    df: pd.DataFrame, 
+    group: list, 
+    threshold: float, 
+    filename: str = "result/report/category_themeriver_numeric.html"
+):
+    """
+    Generates an interactive ThemeRiver chart for categories using a numeric (integer) x-axis,
+    with x-axis labels annotated by the stage names in 'group'.
+    Similar to create_themeriver but uses 'category' column instead of 'class'.
+    """
+    print("--- Generating Category ThemeRiver Report (Numeric X-Axis) ---")
+
+    if df.empty:
+        print("⚠️ Warning: The input DataFrame is empty.")
+        return
+    if not group:
+        print("⚠️ Warning: The 'group' list is empty.")
+        return
     
+    chart_data = []
+    unique_categories = sorted(df['category'].unique())
+    
+    print(f"\n[DEBUG] Processing {len(group)} stages numerically: {group}")
+
+    for i, stage in enumerate(group, start=1):
+        for category_name in unique_categories:
+            filtered_df = df[(df['category'] == category_name) & (df[stage] > threshold)]
+            count = int(filtered_df.shape[0])
+            
+            if count > 0:
+                chart_data.append([i, count, category_name])
+
+    if not chart_data:
+        print("⚠️ Warning: No data points met the threshold criteria. Report will be empty.")
+
+    output_dir = os.path.dirname(filename)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        
+    c = (
+        ThemeRiver(
+            init_opts=opts.InitOpts(
+                width="1200px", 
+                height="600px",
+                theme="white",
+                bg_color="#ffffff"
+            )
+        )
+        .add(
+            series_name=unique_categories,
+            data=chart_data,
+            singleaxis_opts=opts.SingleAxisOpts(
+                type_="value",
+                min_=1,
+                max_=len(group),
+                pos_top="70",
+                pos_bottom="50",
+                axislabel_opts=opts.LabelOpts(
+                    is_show=True,
+                    formatter=lambda x: group[int(x)-1] if 1 <= x <= len(group) else ""
+                ),
+            ),
+        )
+        .set_global_opts(
+            title_opts=opts.TitleOpts(
+                title=f"Category Distribution Across Stages (Values > {threshold})",
+                pos_left="center"
+            ),
+            tooltip_opts=opts.TooltipOpts(
+                trigger="axis", 
+                axis_pointer_type="line"
+            ),
+            legend_opts=opts.LegendOpts(
+                pos_top="5%",
+                pos_left="center",
+                orient="horizontal"
+            )
+        )
+        .set_colors([
+            "#FFF689",
+            "#1E2136",
+            "#FBC2C2",
+            "#32769B",
+            "#F4D35E",
+            "#64557B",
+            "#FFB88A",
+            "#62866C",
+            "#FF9C5B",
+            "#81B2D9",
+            "#F67B45",
+            "#A0C5E3",
+            "#CB7876",
+            "#BBA6DD",
+            "#8BA47C",
+            "#E39B99",
+            "#8C7DA8",
+            "#B4CFA4"
+        ])
+    )
+
+    c.render(filename)
+    print(f"✅ Report saved successfully to '{filename}'")
+
 
 
 
@@ -1297,11 +1402,9 @@ def create_volcano(
             .on("mouseover", function(event, d) {{
                 tooltip.transition().duration(200).style("opacity", .9);
                 tooltip.html(
-                    `<strong>Class:</strong> $${{d.class}}<br/>` +
+                    `<strong>Name:</strong> $${{d.name}}<br/>` +
                     `<strong>Log2 FC:</strong> $${{d.log2_fold_change.toFixed(2)}}<br/>` +
-                    `<strong>P-value:</strong> $${{d.p_value.toExponential(2)}}<br/>` +
-                    `<strong>Length:</strong> $${{d.length.toFixed(1)}}<br/>` +
-                    `<strong>Unsaturation:</strong> $${{d.unsaturation}}`
+                    `<strong>P-value:</strong> $${{d.p_value.toExponential(2)}}`
                 )
                 .style("left", (event.pageX + 15) + "px")
                 .style("top", (event.pageY - 28) + "px");

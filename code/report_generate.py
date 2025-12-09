@@ -4,6 +4,7 @@
 # import lp_data_anaylsis as lpda
 # import sys
 # import argparse
+# from chain_parser_updated import generate_chain_info_from_name, process_chain_dataframe, parse_chain_string
 
 # def generate_report(
 #     input_path,
@@ -45,10 +46,14 @@
 #         raise ValueError(f"Failed to read CSV file: {e}")
 
 #     # Check required columns for data integrity
-#     required_check_cols = ['chain_info', 'class', 'category']
+#     required_check_cols = ['class', 'category']
 #     missing_cols = [c for c in required_check_cols if c not in df.columns]
 #     if missing_cols:
 #         raise ValueError(f"Input CSV missing required columns: {missing_cols}")
+#
+#     # Check for chain_info OR name column (needed for chain_info generation)
+#     if 'chain_info' not in df.columns and 'name' not in df.columns:
+#         raise ValueError("Input CSV must have either 'chain_info' or 'name' column")
 
 #     # Check for at least 20 rows with non-empty values in required columns
 #     valid_rows = df.dropna(subset=required_check_cols)
@@ -79,8 +84,19 @@
 
 #     # --- 3. Data Preparation ---
     
-#     # 1. Drop NA chain_info first
+#     # 1. Generate chain_info from name for rows with empty chain_info
+#     print("Checking for empty chain_info...")
+#     if 'name' in df.columns:
+#         df = generate_chain_info_from_name(df)
+#     else:
+#         print("Warning: 'name' column not found. Skipping chain_info generation from name.")
+    
+#     # Drop any remaining rows with NA chain_info (after generation attempt)
+#     rows_before = len(df)
 #     df = df.dropna(subset=['chain_info'])
+#     rows_dropped = rows_before - len(df)
+#     if rows_dropped > 0:
+#         print(f"Dropped {rows_dropped} rows with missing chain_info after generation attempt")
     
 #     # Put name in the first column if it exists
 #     if 'name' in df.columns:
@@ -605,6 +621,7 @@ import pandas as pd
 import lp_data_anaylsis as lpda
 import sys
 import argparse
+from chain_parser_updated import generate_chain_info_from_name, process_chain_dataframe, parse_chain_string
 
 def generate_report(
     input_path,
@@ -615,7 +632,8 @@ def generate_report(
     int_threshold=3000,
     keep_cols=['index', 'precursor_mz', 'adduct', 'MS2_norm'],
     p_value_threshold=0.5,
-    fc_threshold=0
+    fc_threshold=0,
+    confidence=0.8
 ):
     """
     Generates a lipidomics analysis report.
@@ -630,6 +648,7 @@ def generate_report(
     - keep_cols: List of columns to keep for MS table (default: ['index', 'precursor_mz', 'adduct']).
     - p_value_threshold: P-value threshold for volcano plot (default: 0.5).
     - fc_threshold: Fold change threshold (default: 0).
+    - confidence: Confidence threshold for filtering (default: 0.8).
     """
 
     # --- 1. Validation ---
@@ -646,23 +665,25 @@ def generate_report(
         raise ValueError(f"Failed to read CSV file: {e}")
 
     # --- MODIFICATION START: Handle missing chain_info ---
+    # Check if chain_info exists, if not try plsf_rank1 as backup
     if 'chain_info' not in df.columns:
         if 'plsf_rank1' in df.columns:
             print("Notice: 'chain_info' column missing. Using 'plsf_rank1' as substitute.")
             df['chain_info'] = df['plsf_rank1']
-        else:
-            # We won't raise here, we let the standard check below catch it
-            # so the error lists all missing columns consistently.
-            pass
     # --- MODIFICATION END ---
 
     # Check required columns for data integrity
-    required_check_cols = ['chain_info', 'class', 'category']
+    required_check_cols = ['class', 'category']
     missing_cols = [c for c in required_check_cols if c not in df.columns]
     if missing_cols:
-        raise ValueError(f"Input CSV missing required columns: {missing_cols}. (Note: If 'chain_info' is missing, ensure 'plsf_rank1' is present).")
+        raise ValueError(f"Input CSV missing required columns: {missing_cols}")
+
+    # Check for chain_info OR name column (needed for chain_info generation)
+    if 'chain_info' not in df.columns and 'name' not in df.columns:
+        raise ValueError("Input CSV must have either 'chain_info' or 'name' column (or 'plsf_rank1' as fallback)")
 
     # Check for at least 20 rows with non-empty values in required columns
+    # Note: We check chain_info AFTER generation, so skip it here
     valid_rows = df.dropna(subset=required_check_cols)
     if len(valid_rows) < 20:
         raise ValueError(f"Input file must have at least 20 rows with non-empty values in {required_check_cols}. Found {len(valid_rows)}.")
@@ -691,8 +712,50 @@ def generate_report(
 
     # --- 3. Data Preparation ---
     
-    # 1. Drop NA chain_info first
+    # 1. Generate chain_info from name for rows with empty chain_info
+    print("Checking for empty chain_info...")
+    if 'name' in df.columns:
+        df = generate_chain_info_from_name(df)
+    else:
+        print("Warning: 'name' column not found. Skipping chain_info generation from name.")
+    
+    # Drop any remaining rows with NA chain_info (after generation attempt)
+    rows_before = len(df)
     df = df.dropna(subset=['chain_info'])
+    rows_dropped = rows_before - len(df)
+    if rows_dropped > 0:
+        print(f"Dropped {rows_dropped} rows with missing chain_info after generation attempt")
+    
+    # 2. Filter by confidence threshold
+    print(f"Filtering by confidence threshold (>= {confidence})...")
+    rows_before = len(df)
+    
+    # Drop rows where mass_diff_ppm is empty OR pref_confidence < threshold
+    if 'mass_diff_ppm' in df.columns and 'pref_confidence' in df.columns:
+        df = df[df['mass_diff_ppm'].notna() & (df['pref_confidence'] >= confidence)]
+        rows_dropped = rows_before - len(df)
+        if rows_dropped > 0:
+            print(f"Dropped {rows_dropped} rows with empty mass_diff_ppm or pref_confidence < {confidence}")
+        else:
+            print(f"No rows dropped - all passed confidence filter")
+    elif 'mass_diff_ppm' in df.columns:
+        # Only filter by mass_diff_ppm if pref_confidence doesn't exist
+        df = df[df['mass_diff_ppm'].notna()]
+        rows_dropped = rows_before - len(df)
+        if rows_dropped > 0:
+            print(f"Dropped {rows_dropped} rows with empty mass_diff_ppm")
+        print("Warning: 'pref_confidence' column not found. Skipping confidence filter.")
+    elif 'pref_confidence' in df.columns:
+        # Only filter by pref_confidence if mass_diff_ppm doesn't exist
+        df = df[df['pref_confidence'] >= confidence]
+        rows_dropped = rows_before - len(df)
+        if rows_dropped > 0:
+            print(f"Dropped {rows_dropped} rows with pref_confidence < {confidence}")
+        print("Warning: 'mass_diff_ppm' column not found. Skipping mass_diff_ppm filter.")
+    else:
+        print("Warning: Neither 'mass_diff_ppm' nor 'pref_confidence' columns found. Skipping confidence filter.")
+    
+    print(f"Remaining rows after filtering: {len(df)}")
     
     # Put name in the first column if it exists
     if 'name' in df.columns:
@@ -835,12 +898,20 @@ def generate_report(
     except TypeError:
         print("Warning: Could not save generic class sunburst (check function signature).")
 
-    # 4. ThemeRiver
+    # 4. ThemeRiver - Class
     lpda.create_themeriver(
         df=met_avg,
         group=groups,
         threshold=int_threshold,
         filename=mat_path("class_themeriver.html")
+    )
+    
+    # 4b. ThemeRiver - Category
+    lpda.create_category_themeriver(
+        df=met_avg,
+        group=groups,
+        threshold=int_threshold,
+        filename=mat_path("category_themeriver.html")
     )
 
     # 5. PCA
@@ -870,6 +941,7 @@ def generate_report(
 
     trend_content_parts = []
     trend_content_parts.append(create_plot_embed_html(rel_src('class_themeriver.html'), height='80vh', title='Class Themeriver'))
+    trend_content_parts.append(create_plot_embed_html(rel_src('category_themeriver.html'), height='80vh', title='Category Themeriver'))
     
     class_plot = create_plot_embed_html(rel_src('class.html'), title='Class')
     pca_plot = create_plot_embed_html(rel_src('pca.html'), title='PCA')
@@ -1171,6 +1243,7 @@ if __name__ == "__main__":
     parser.add_argument("--keep_cols", nargs='+', default=['index', 'name', 'precursor_mz', 'adduct', 'MS2_norm'], help="List of columns to keep for MS table")
     parser.add_argument("--p_value_threshold", type=float, default=0.05, help="P-value threshold")
     parser.add_argument("--fc_threshold", type=float, default=1.2, help="Fold change threshold")
+    parser.add_argument("--confidence", type=float, default=0.8, help="Confidence threshold for filtering (default: 0.8)")
 
     args = parser.parse_args()
 
@@ -1184,7 +1257,8 @@ if __name__ == "__main__":
             int_threshold=args.int_threshold,
             keep_cols=args.keep_cols,
             p_value_threshold=args.p_value_threshold,
-            fc_threshold=args.fc_threshold
+            fc_threshold=args.fc_threshold,
+            confidence=args.confidence
         )
     except Exception as e:
         print(f"Execution Error: {e}")
