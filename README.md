@@ -69,7 +69,7 @@ python code/report_generate.py \
   --groups 0h 2h 4h 8h \
   --group_1 0h \
   --group_2 8h \
-  --p_value_threshold 0.1 \
+  --p_value_threshold 0.5 \
   --fc_threshold 1
 ```
 
