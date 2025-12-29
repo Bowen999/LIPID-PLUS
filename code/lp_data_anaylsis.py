@@ -885,7 +885,6 @@ def create_themeriver(
         )
         .set_global_opts(
             title_opts=opts.TitleOpts(
-                title=f"Class Distribution Across Stages (Values > {threshold})",
                 pos_left="center"
             ),
             tooltip_opts=opts.TooltipOpts(
@@ -1014,7 +1013,6 @@ def create_category_themeriver(
         )
         .set_global_opts(
             title_opts=opts.TitleOpts(
-                title=f"Category Distribution Across Stages (Values > {threshold})",
                 pos_left="center"
             ),
             tooltip_opts=opts.TooltipOpts(
@@ -1254,7 +1252,6 @@ def create_volcano(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Volcano Plot</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         body {{
@@ -1406,7 +1403,7 @@ def create_volcano(
 
         svg.append("text").attr("class", "axis-label").attr("text-anchor", "middle").attr("x", width / 2).attr("y", height + margin.bottom - 15).text("Log2 Fold Change");
         svg.append("text").attr("class", "axis-label").attr("text-anchor", "middle").attr("transform", "rotate(-90)").attr("y", -margin.left + 20).attr("x", -height / 2).text("-log10(p-value)");
-        svg.append("text").attr("class", "title-label").attr("text-anchor", "middle").attr("x", width / 2).attr("y", -margin.top / 2 + 10).text("Interactive Volcano Plot");
+        svg.append("text").attr("class", "title-label").attr("text-anchor", "middle").attr("x", width / 2).attr("y", -margin.top / 2 + 10).text(" ");
 
         // --- THRESHOLD LINES ---
         svg.append("line").attr("x1", x(fold_change_threshold)).attr("x2", x(fold_change_threshold)).attr("y1", 0).attr("y2", height).attr("stroke", "red").attr("stroke-width", 1.5).attr("stroke-dasharray", "4");
@@ -1474,7 +1471,7 @@ def create_volcano(
         const significantClassCounts = d3.rollup(significantData, v => v.length, d => d.class);
         const legendClasses = uniqueClasses.filter(cls => (significantClassCounts.get(cls) || 0) >= 1);
         const classLegend = svg.append("g").attr("class", "legend").attr("transform", `translate(${{legendX}}, 0)`);
-        classLegend.append("text").attr("class", "legend-title").text("Metabolite Class");
+        classLegend.append("text").attr("class", "legend-title").text("Lipid Class");
         
         const numClasses = legendClasses.length;
         const isMultiColumn = numClasses > 10;

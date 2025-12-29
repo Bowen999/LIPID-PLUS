@@ -713,6 +713,19 @@ def generate_report(
 
     # --- 3. Data Preparation ---
     
+    # 0. Drop rows with empty 'name' column
+    print("Filtering out rows with empty 'name' column...")
+    if 'name' in df.columns:
+        rows_before = len(df)
+        df = df[df['name'].notna() & (df['name'].astype(str).str.strip() != '')]
+        rows_dropped = rows_before - len(df)
+        if rows_dropped > 0:
+            print(f"Dropped {rows_dropped} rows with empty 'name'")
+        else:
+            print("No rows with empty 'name' found")
+    else:
+        print("Warning: 'name' column not found in data")
+    
     # 1. Generate chain_info from name for rows with empty chain_info
     print("Checking for empty chain_info...")
     if 'name' in df.columns:
@@ -727,20 +740,28 @@ def generate_report(
     if rows_dropped > 0:
         print(f"Dropped {rows_dropped} rows with missing chain_info after generation attempt")
     
-    # 2. Filter by confidence threshold (NOT filtering by mass_diff_ppm - keeping those rows)
+    # 2. Filter by confidence threshold (keep rows with empty pred_confidence)
     print(f"Filtering by confidence threshold (>= {confidence})...")
     rows_before = len(df)
     
-    # Filter only by pref_confidence, NOT by mass_diff_ppm (keep rows with empty mass_diff_ppm)
+    # Check for both possible column names: 'pref_confidence' or 'pred_confidence'
+    confidence_col = None
     if 'pref_confidence' in df.columns:
-        df = df[df['pref_confidence'] >= confidence]
+        confidence_col = 'pref_confidence'
+    elif 'pred_confidence' in df.columns:
+        confidence_col = 'pred_confidence'
+    
+    if confidence_col:
+        # Keep rows where confidence is NaN (not available) OR confidence >= threshold
+        # Filter OUT only rows where confidence is present AND below threshold
+        df = df[(df[confidence_col].isna()) | (df[confidence_col] >= confidence)]
         rows_dropped = rows_before - len(df)
         if rows_dropped > 0:
-            print(f"Dropped {rows_dropped} rows with pref_confidence < {confidence}")
+            print(f"Dropped {rows_dropped} rows with {confidence_col} < {confidence} (kept rows with empty/NaN {confidence_col})")
         else:
             print(f"No rows dropped - all passed confidence filter")
     else:
-        print("Warning: 'pref_confidence' column not found. Skipping confidence filter.")
+        print("Warning: Neither 'pref_confidence' nor 'pred_confidence' column found. Skipping confidence filter.")
     
     print(f"Remaining rows after filtering: {len(df)}")
     
@@ -851,7 +872,8 @@ def generate_report(
 
     # 2. Merge metadata from original df
     # Columns we definitely need for plots
-    needed_cols = ['unsaturation', 'length', 'class', 'category', 'chain_info']
+    # Include confidence column (both possible names) so users can verify filtering
+    needed_cols = ['unsaturation', 'length', 'class', 'category', 'chain_info', 'pref_confidence', 'pred_confidence']
     # Filter to what is actually available in the source
     available_cols = [c for c in needed_cols if c in df.columns]
     
