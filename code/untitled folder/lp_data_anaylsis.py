@@ -738,7 +738,6 @@ def create_violin(df, column_list=None, threshold=0.5, value_column='unsaturatio
 def create_sunburst(df: pd.DataFrame, filename: str = "result/report/class.html"):
     """
     Generates a single, interactive sunburst chart from a DataFrame.
-    Filters out 'Unknown' category (case-insensitive).
 
     Args:
         df (pd.DataFrame): Must contain 'category' and 'class' columns.
@@ -750,18 +749,9 @@ def create_sunburst(df: pd.DataFrame, filename: str = "result/report/class.html"
         print("⚠️ Warning: The input DataFrame is empty. No report will be generated.")
         return
 
-    # Filter out 'Unknown' category (case-insensitive)
-    df_filtered = df[df['category'].str.lower() != 'unknown'].copy()
-    
-    if df_filtered.empty:
-        print("⚠️ Warning: After filtering out 'Unknown' category, the DataFrame is empty. No report will be generated.")
-        return
-    
-    print(f"Filtered out 'Unknown' category. Rows remaining: {len(df_filtered)} (was {len(df)})")
-
     # 1. Create the sunburst chart (remove fixed width/height)
     fig = px.sunburst(
-        df_filtered,
+        df,
         path=['category', 'class'],
         color='category',
         color_discrete_sequence=px.colors.qualitative.Set2,
@@ -986,7 +976,7 @@ def create_category_themeriver(
         ThemeRiver(
             init_opts=opts.InitOpts(
                 width="1200px", 
-                height="400px",  # Reduced from 600px for Category ThemeRiver
+                height="600px",
                 theme="white",
                 bg_color="#ffffff"
             )

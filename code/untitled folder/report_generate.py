@@ -727,20 +727,34 @@ def generate_report(
     if rows_dropped > 0:
         print(f"Dropped {rows_dropped} rows with missing chain_info after generation attempt")
     
-    # 2. Filter by confidence threshold (NOT filtering by mass_diff_ppm - keeping those rows)
+    # 2. Filter by confidence threshold
     print(f"Filtering by confidence threshold (>= {confidence})...")
     rows_before = len(df)
     
-    # Filter only by pref_confidence, NOT by mass_diff_ppm (keep rows with empty mass_diff_ppm)
-    if 'pref_confidence' in df.columns:
+    # Drop rows where mass_diff_ppm is empty OR pref_confidence < threshold
+    if 'mass_diff_ppm' in df.columns and 'pref_confidence' in df.columns:
+        df = df[df['mass_diff_ppm'].notna() & (df['pref_confidence'] >= confidence)]
+        rows_dropped = rows_before - len(df)
+        if rows_dropped > 0:
+            print(f"Dropped {rows_dropped} rows with empty mass_diff_ppm or pref_confidence < {confidence}")
+        else:
+            print(f"No rows dropped - all passed confidence filter")
+    elif 'mass_diff_ppm' in df.columns:
+        # Only filter by mass_diff_ppm if pref_confidence doesn't exist
+        df = df[df['mass_diff_ppm'].notna()]
+        rows_dropped = rows_before - len(df)
+        if rows_dropped > 0:
+            print(f"Dropped {rows_dropped} rows with empty mass_diff_ppm")
+        print("Warning: 'pref_confidence' column not found. Skipping confidence filter.")
+    elif 'pref_confidence' in df.columns:
+        # Only filter by pref_confidence if mass_diff_ppm doesn't exist
         df = df[df['pref_confidence'] >= confidence]
         rows_dropped = rows_before - len(df)
         if rows_dropped > 0:
             print(f"Dropped {rows_dropped} rows with pref_confidence < {confidence}")
-        else:
-            print(f"No rows dropped - all passed confidence filter")
+        print("Warning: 'mass_diff_ppm' column not found. Skipping mass_diff_ppm filter.")
     else:
-        print("Warning: 'pref_confidence' column not found. Skipping confidence filter.")
+        print("Warning: Neither 'mass_diff_ppm' nor 'pref_confidence' columns found. Skipping confidence filter.")
     
     print(f"Remaining rows after filtering: {len(df)}")
     
@@ -937,7 +951,7 @@ def generate_report(
 
     trend_content_parts = []
     trend_content_parts.append(create_plot_embed_html(rel_src('class_themeriver.html'), height='80vh', title='Class Themeriver'))
-    trend_content_parts.append(create_plot_embed_html(rel_src('category_themeriver.html'), height='50vh', title='Category Themeriver'))
+    trend_content_parts.append(create_plot_embed_html(rel_src('category_themeriver.html'), height='80vh', title='Category Themeriver'))
     
     class_plot = create_plot_embed_html(rel_src('class.html'), title='Class')
     pca_plot = create_plot_embed_html(rel_src('pca.html'), title='PCA')
