@@ -32,6 +32,7 @@ import os
 import pandas as pd
 from pyecharts import options as opts
 from pyecharts.charts import ThemeRiver
+from pyecharts.commons.utils import JsCode
 import os
 
 import pandas as pd
@@ -828,6 +829,19 @@ def create_themeriver(
     output_dir = os.path.dirname(filename)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
+    
+    # Create JavaScript formatter for axis labels using group names
+    group_labels_js = str(group)  # Convert Python list to string representation
+    axis_formatter = JsCode(
+        f"""function(value) {{
+            var labels = {group_labels_js};
+            var idx = Math.round(value) - 1;
+            if (idx >= 0 && idx < labels.length) {{
+                return labels[idx];
+            }}
+            return '';
+        }}"""
+    )
         
     c = (
         ThemeRiver(
@@ -847,9 +861,15 @@ def create_themeriver(
                 max_=len(group),
                 pos_top="70",
                 pos_bottom="50",
+                axistick_opts=opts.AxisTickOpts(
+                    is_show=True,
+                    is_align_with_label=True
+                ),
                 axislabel_opts=opts.LabelOpts(
                     is_show=True,
-                    formatter=lambda x: group[int(x)-1] if 1 <= x <= len(group) else ""
+                    formatter=axis_formatter,
+                    font_size=12,
+                    font_weight="bold"
                 ),
             ),
         )
@@ -905,6 +925,7 @@ def create_category_themeriver(
     Generates an interactive ThemeRiver chart for categories using a numeric (integer) x-axis,
     with x-axis labels annotated by the stage names in 'group'.
     Similar to create_themeriver but uses 'category' column instead of 'class'.
+    Filters out 'Unknown' category.
     """
     print("--- Generating Category ThemeRiver Report (Numeric X-Axis) ---")
 
@@ -916,9 +937,12 @@ def create_category_themeriver(
         return
     
     chart_data = []
-    unique_categories = sorted(df['category'].unique())
+    # Filter out 'Unknown' category (case-insensitive)
+    unique_categories = sorted([cat for cat in df['category'].unique() 
+                                if cat and str(cat).lower() != 'unknown'])
     
     print(f"\n[DEBUG] Processing {len(group)} stages numerically: {group}")
+    print(f"[DEBUG] Categories (excluding Unknown): {unique_categories}")
 
     for i, stage in enumerate(group, start=1):
         for category_name in unique_categories:
@@ -934,6 +958,19 @@ def create_category_themeriver(
     output_dir = os.path.dirname(filename)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
+    
+    # Create JavaScript formatter for axis labels using group names
+    group_labels_js = str(group)  # Convert Python list to string representation
+    axis_formatter = JsCode(
+        f"""function(value) {{
+            var labels = {group_labels_js};
+            var idx = Math.round(value) - 1;
+            if (idx >= 0 && idx < labels.length) {{
+                return labels[idx];
+            }}
+            return '';
+        }}"""
+    )
         
     c = (
         ThemeRiver(
@@ -953,9 +990,15 @@ def create_category_themeriver(
                 max_=len(group),
                 pos_top="70",
                 pos_bottom="50",
+                axistick_opts=opts.AxisTickOpts(
+                    is_show=True,
+                    is_align_with_label=True
+                ),
                 axislabel_opts=opts.LabelOpts(
                     is_show=True,
-                    formatter=lambda x: group[int(x)-1] if 1 <= x <= len(group) else ""
+                    formatter=axis_formatter,
+                    font_size=12,
+                    font_weight="bold"
                 ),
             ),
         )
@@ -1402,9 +1445,9 @@ def create_volcano(
             .on("mouseover", function(event, d) {{
                 tooltip.transition().duration(200).style("opacity", .9);
                 tooltip.html(
-                    `<strong>Name:</strong> $${{d.name}}<br/>` +
-                    `<strong>Log2 FC:</strong> $${{d.log2_fold_change.toFixed(2)}}<br/>` +
-                    `<strong>P-value:</strong> $${{d.p_value.toExponential(2)}}`
+                    `<strong>Name:</strong> ${{d.name}}<br/>` +
+                    `<strong>Log2 FC:</strong> ${{d.log2_fold_change.toFixed(2)}}<br/>` +
+                    `<strong>P-value:</strong> ${{d.p_value.toExponential(2)}}`
                 )
                 .style("left", (event.pageX + 15) + "px")
                 .style("top", (event.pageY - 28) + "px");

@@ -618,6 +618,7 @@
 import os
 import ast
 import pandas as pd
+import numpy as np
 import lp_data_anaylsis as lpda
 import sys
 import argparse
@@ -926,9 +927,18 @@ def generate_report(
     )
 
     # 7. Differential - Class, Unsaturation, Length
-    lpda.create_sunburst(met_sig, filename=mat_path('class_sig.html'))
-    lpda.create_violin(met_sig, column_list=None, threshold=0, value_column='unsaturation', output_filename=mat_path('unsaturation_sig.html'))
-    lpda.create_violin(met_sig, column_list=None, threshold=0, value_column='length', output_filename=mat_path('length_sig.html'))
+    # Use all differential lipids (both up and down regulated)
+    # Filter by p-value significance only, to include both up and down expressed lipids
+    met_differential = met_data[
+        (met_data['p_value'] < p_value_threshold) & 
+        (abs(met_data['log2_fold_change']) > np.log2(fc_threshold))
+    ].copy()
+    
+    print(f"Differential lipids for comparison plots: {len(met_differential)} (includes both up and down regulated)")
+    
+    lpda.create_sunburst(met_differential, filename=mat_path('class_sig.html'))
+    lpda.create_violin(met_differential, column_list=None, threshold=0, value_column='unsaturation', output_filename=mat_path('unsaturation_sig.html'))
+    lpda.create_violin(met_differential, column_list=None, threshold=0, value_column='length', output_filename=mat_path('length_sig.html'))
 
     # --- 5. Report Merging ---
     print("Merging report...")
