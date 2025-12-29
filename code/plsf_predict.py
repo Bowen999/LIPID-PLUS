@@ -1217,6 +1217,87 @@ def batch_beam_search_alternatives(df_group, chain_models, max_stage, target_pai
 
 
 # ============================================================================
+# Confidence Combination Functions
+# ============================================================================
+
+def combine_confidences(plsf_conf, adduct_conf, class_conf, floor=0.01):
+    """
+    Combine multiple confidence scores with normalization to prevent
+    one extremely low value from dominating the result.
+    
+    Uses geometric mean with a floor applied to each confidence:
+    - First, apply a minimum floor to each confidence (prevents extreme lows)
+    - Then compute geometric mean (nth root of product)
+    
+    This ensures:
+    - If all are high (0.9, 0.9, 0.9) -> result is ~0.9
+    - If one is very low (0.9, 0.9, 0.0001) -> result is low but reasonable (~0.09)
+    - If all are low -> result is low
+    
+    Args:
+        plsf_conf: PLSF prediction confidence
+        adduct_conf: Adduct prediction confidence (use 1.0 if not available)
+        class_conf: Class prediction confidence (use 1.0 if not available)
+        floor: Minimum value for each confidence (default 0.01)
+    
+    Returns:
+        Combined confidence score
+    """
+    # Apply floor to each confidence to prevent extreme values
+    plsf_floored = max(float(plsf_conf), floor)
+    adduct_floored = max(float(adduct_conf), floor)
+    class_floored = max(float(class_conf), floor)
+    
+    # Geometric mean: (a * b * c)^(1/3)
+    # This is more robust than simple product when one value is very low
+    product = plsf_floored * adduct_floored * class_floored
+    geometric_mean = product ** (1.0 / 3.0)
+    
+    return geometric_mean
+
+
+def compute_combined_confidence_vectorized(df, floor=0.01):
+    """
+    Vectorized computation of combined confidence for a DataFrame.
+    
+    Args:
+        df: DataFrame with 'plsf_confidence' and optionally 'adduct_confidence', 'class_confidence'
+        floor: Minimum value for each confidence
+    
+    Returns:
+        Series of combined confidence scores
+    """
+    # Get PLSF confidence
+    plsf_conf = df['plsf_confidence'].fillna(0.0).values
+    
+    # Get adduct confidence (default to 1.0 if not present)
+    if 'adduct_confidence' in df.columns:
+        adduct_conf = df['adduct_confidence'].fillna(1.0).values
+    else:
+        adduct_conf = np.ones(len(df))
+    
+    # Get class confidence (default to 1.0 if not present)
+    if 'class_confidence' in df.columns:
+        class_conf = df['class_confidence'].fillna(1.0).values
+    else:
+        class_conf = np.ones(len(df))
+    
+    # Apply floor to prevent extreme values
+    plsf_floored = np.maximum(plsf_conf, floor)
+    adduct_floored = np.maximum(adduct_conf, floor)
+    class_floored = np.maximum(class_conf, floor)
+    
+    # Geometric mean: (a * b * c)^(1/3)
+    product = plsf_floored * adduct_floored * class_floored
+    geometric_mean = np.power(product, 1.0 / 3.0)
+    
+    # Handle NaN plsf_confidence -> result should be NaN
+    geometric_mean = np.where(np.isnan(df['plsf_confidence'].values), np.nan, geometric_mean)
+    
+    return pd.Series(geometric_mean, index=df.index)
+
+
+# ============================================================================
 # PLSFPredictor Class - Optimized
 # ============================================================================
 
@@ -1648,8 +1729,11 @@ class PLSFPredictor:
             
             df_output['name'] = df_output.apply(get_lipid_name, axis=1)
             
+            # Calculate combined prediction confidence from PLSF, adduct, and class confidences
+            # Uses geometric mean with floor normalization to prevent one extreme low value
+            # from dominating the result
             if 'plsf_confidence' in df_output.columns:
-                df_output['pred_confidence'] = df_output['plsf_confidence'].round(2)
+                df_output['pred_confidence'] = compute_combined_confidence_vectorized(df_output, floor=0.01).round(2)
             
             cols_to_drop = [c for c in df_output.columns if c.startswith('mz_')]
             cols_to_drop.extend([c for c in df_output.columns if c.startswith('num_c_') or c.startswith('num_db_')])
